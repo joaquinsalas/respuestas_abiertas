@@ -2,6 +2,11 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import pandas as pd
 import os
+from sklearn.preprocessing import normalize
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
+
 
 load_dotenv() #carga variables de entorno definidas en el archivo .env
 
@@ -40,4 +45,38 @@ def get_embeddings_main(dataframe_csv : pd.DataFrame, text_column, ID_column = N
         dataframe_output["ID"] =  range(len(list_text))
     return dataframe_output
 
-get_embeddings_main(pd.read_csv("entrada.csv"), "texto").to_csv("prueba2.csv", index=False)
+#get_embeddings_main(pd.read_csv("entrada.csv"), "texto").to_csv("prueba2.csv", index=False)
+df = pd.read_csv("prueba2.csv")
+
+# separar ID y embeddings
+ids = df["ID"].values
+X = df.drop(columns=["ID"]).values
+
+# normalizar embeddings
+X_norm = normalize(X)
+
+# K-Means (en alta dimensión)
+kmeans = KMeans(n_clusters=7, random_state=42)
+labels = kmeans.fit_predict(X_norm)
+
+# PCA SOLO para visualización
+X_2d = PCA(n_components=2).fit_transform(X_norm)
+
+# Plot
+plt.figure(figsize=(7, 6))
+plt.scatter(X_2d[:, 0], X_2d[:, 1], c=labels)
+
+# Etiquetas visibles (ID)
+for i, id_val in enumerate(ids):
+    plt.annotate(
+        str(id_val),
+        (X_2d[i, 0], X_2d[i, 1]),
+        textcoords="offset points",
+        xytext=(5, 5),
+        fontsize=9
+    )
+
+plt.title("Visualización 2D de Clusters (PCA) con ID")
+plt.xlabel("PC1")
+plt.ylabel("PC2")
+plt.show()
