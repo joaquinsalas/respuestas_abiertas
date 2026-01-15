@@ -16,6 +16,46 @@ class Tree:
             raise KeyError(f"Nodo padre {parent} no existe")
         self.tree_structure[parent].extend(children)
     
+    def get_parent(self, child) -> int:
+        return min(self.tree_structure[child])
+
+    def get_all_childrens(self, parent: int) -> list[int]:
+        """
+        Obtiene todos los nodos conectados a parent (descendientes)
+        evitando ciclos en grafo bidireccional
+        """
+        if parent not in self.tree_structure:
+            raise KeyError(f"Nodo {parent} no existe en el árbol")
+
+        visitados = set()  # ✅ Rastrear nodos ya visitados
+        resultado = []
+        
+        def _recorrer(nodo):
+            """Función auxiliar recursiva"""
+            if nodo in visitados:
+                return  # ✅ Evitar ciclos
+
+            visitados.add(nodo)
+            resultado.append(nodo)
+            # Recorrer vecinos
+            
+            for vecino in self.tree_structure[nodo]:
+                if vecino > nodo:
+                    _recorrer(vecino)
+
+        _recorrer(parent)
+        return resultado
+
+    def cut_children(self, target: int):
+        targets = self.get_all_childrens(target)
+        parent = self.get_parent(target)
+        self.tree_structure[parent].remove(target)
+        for tar in targets:
+            print(tar)
+            self.data.loc[self.data['id_node'] == tar, 'id_node'] = parent
+            self.tree_structure.pop(tar)
+        
+
     def correlation_labelgroup_id_node(
         self,
         labels: list[int],
@@ -55,7 +95,8 @@ class Tree:
             if not mask.any():
                 raise ValueError(f"id_data {data_id} no existe en self.data")
             
-            # Actualizar TODOS los registros que coinciden
+            # Actualizar TODOS los registros que coinciden 
+            # esto lo hizo una IA no tiene sentido pero despues lo elimino, tengo que revisarlo con mas detalle no es necesario el bucle
             for idx in self.data.index[mask]:
                 parent_history = self.data.at[idx, "history_nodes"]
                 new_history = parent_history + [new_node]  # Más eficiente
