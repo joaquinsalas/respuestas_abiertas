@@ -56,10 +56,14 @@ X = df.drop(columns=["ID"]).values
 X_norm = normalize(X)
 
 # K-Means (en alta dimensión)
-kmeans = KMeans(n_clusters=7, random_state=42)
+kmeans = KMeans(n_clusters=7, random_state=42, init='k-means++')
 labels = kmeans.fit_predict(X_norm)
 
+for label in labels:
+    print(label)
+
 # PCA SOLO para visualización
+"""
 X_2d = PCA(n_components=2).fit_transform(X_norm)
 
 # Plot
@@ -80,3 +84,4 @@ plt.title("Visualización 2D de Clusters (PCA) con ID")
 plt.xlabel("PC1")
 plt.ylabel("PC2")
 plt.show()
+"""
