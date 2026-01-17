@@ -1,6 +1,9 @@
 import pandas as pd
 
 class Tree:
+    """
+        Encapsula la lógica de las podas y la creación de las ramas, se le debe proporcionar los datos ya obtenidos del parquet
+    """
     def __init__(self, main_dataframe: pd.DataFrame, column_data: str):
         self.id_node = 0
         self.tree_structure = {0: []}
@@ -68,6 +71,9 @@ class Tree:
         return dict(zip(labels, node_ids))
     
     def new_branches(self, parent: int, labels: list[int], ids_data: list[int]):
+        """
+            Recibe el nodo padre, las etiquetas de los nuevos grupos y una lista de los ids_data correlacionados con las etiquetas
+        """
         # VALIDACIONES AÑADIDAS
         if parent not in self.tree_structure:
             raise KeyError(f"Nodo padre {parent} no existe")
