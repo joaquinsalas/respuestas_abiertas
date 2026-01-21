@@ -20,5 +20,6 @@ from django.urls import path
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('new_tree/', views.new_tree, name="new_tree")
+    path('new_tree/', views.new_tree, name="new_tree"),
+    path('new_branches/', views.new_branches, name="new_branches"),
 ]

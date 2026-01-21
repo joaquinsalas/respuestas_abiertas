@@ -4,17 +4,20 @@ class Tree:
     """
         Encapsula la lógica de las podas y la creación de las ramas, se le debe proporcionar los datos ya obtenidos del parquet
     """
-    def __init__(self, main_dataframe: pd.DataFrame, column_data: str):
-        self.id_node = 0
-        self.tree_structure = {0: []}
+    def __init__(self, main_dataframe: pd.DataFrame, column_data: str, id_node: int = 0):
+        self.id_node = id_node
+        self.tree_structure = {id_node: []}
         n = len(main_dataframe)
         self.data = pd.DataFrame({
-            "id_node": [0] * n,
+            "id_node": [id_node] * n,
             "id_data": main_dataframe[column_data].values,
-            "history_nodes": [[0] for _ in range(n)]
+            "history_nodes": [[id_node] for _ in range(n)] #esto se tendra que modificar 
         })
     
     def tree_new_nodes(self, parent: int, children: list[int]):
+        """
+        para este punto los nodos ya deben tener su ID asignado
+        modifica la estructura del arbol (lista de adyacencia) agregando nuevos nodos hijos a un nodo padre existente"""
         if parent not in self.tree_structure:
             raise KeyError(f"Nodo padre {parent} no existe")
         self.tree_structure[parent].extend(children)
@@ -115,3 +118,4 @@ class Tree:
         # Inicializar nodos hoja
         for node in new_nodes:
             self.tree_structure[node] = [parent]
+        
