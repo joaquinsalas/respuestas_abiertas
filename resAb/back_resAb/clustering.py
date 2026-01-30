@@ -1,8 +1,6 @@
 import numpy as np
 from sklearn.preprocessing import normalize
-from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
-import matplotlib.pyplot as plt
 
 
 class Cluster:

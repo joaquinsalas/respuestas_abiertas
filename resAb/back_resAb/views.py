@@ -1,5 +1,6 @@
 from django.shortcuts import render
-from django.http import HttpResponse, HttpRequest, HttpResponseNotFound
+from django.http import HttpResponse, HttpRequest, HttpResponseNotFound, JsonResponse
+import json
 from back_resAb.tree import Tree
 from .models import Usuario, Arbol
 from datetime import datetime
@@ -27,11 +28,106 @@ def save_or_update_tree_s3(path : str, data : pd.DataFrame):
         index=False,
     )
 
+def read_tree_s3(path : str) -> pd.DataFrame:
+    full_path = f"{BUCKET}/{path}"
+    if not fs.exists(full_path):
+        raise FileNotFoundError(f"El archivo {full_path} no existe en el bucket {BUCKET}")
+    data = pd.read_parquet(
+        path=full_path,
+        engine="pyarrow",
+        filesystem=fs,
+    )
+    return data
+
+
+
 def name_parquet_file(id_usuario : int, id_tree : int, id_node :int ) -> str:
     """
         el id_tree = 0 sera asignado por defecto cuando no conozcamos el id del arbol
     """
     return f"{id_usuario}/{id_tree}/{id_node}.parquet"
+
+@csrf_exempt
+def get_tree_structure(request: HttpRequest):
+    """
+    Recibe id_usuario e id_arbol y regresa la estructura del árbol (lista de adyacencia)
+    """
+    id_usuario = request.GET.get('id_usuario')
+    id_arbol = request.GET.get('id_arbol')
+
+    if not id_usuario or not id_arbol:
+        return JsonResponse({"error": "Faltan parámetros id_usuario e id_arbol"}, status=400)
+
+    try:
+        arbol = Arbol.objects.get(id=id_arbol, id_usuario_id=id_usuario)
+    except Arbol.DoesNotExist:
+        return JsonResponse({"error": "Árbol no encontrado para este usuario"}, status=404)
+
+    return JsonResponse(arbol.tree_structure, safe=True)
+
+@csrf_exempt
+def get_node_data(request: HttpRequest):
+    """
+    Recibe id_usuario, id_arbol, id_node y opcionalmente page.
+    Regresa los datos del nodo de 10 en 10.
+    """
+    id_usuario = request.GET.get('id_usuario')
+    id_arbol = request.GET.get('id_arbol')
+    id_node = request.GET.get('id_node')
+    page = int(request.GET.get('page', 0))
+    page_size = 10
+
+    if not all([id_usuario, id_arbol, id_node]):
+        return JsonResponse({"error": "Faltan parámetros id_usuario, id_arbol o id_node"}, status=400)
+
+    path = name_parquet_file(id_usuario, id_arbol, id_node)
+    full_path = f"{BUCKET}/{path}"
+
+    if not fs.exists(full_path):
+        return JsonResponse({"error": f"El archivo {full_path} no existe"}, status=404)
+    try:
+        arbol = Arbol.objects.get(id=id_arbol)
+    except Arbol.DoesNotExist:
+        return JsonResponse({"error": "Árbol no encontrado"}, status=404)
+    df = read_tree_s3(path)
+    start = page * page_size
+    end = start + page_size
+    
+    data_paginated : pd.DataFrame = df.iloc[start:end]
+    data_paginated : list = data_paginated[arbol.text_column].to_list()
+    print(type(data_paginated))
+    return JsonResponse({
+        "data": data_paginated,
+        "total_rows": len(df),
+        "page": page,
+        "page_size": page_size
+    })
+
+
+@csrf_exempt
+def get_trees(request: HttpRequest):
+    """
+    Recibe un id_usuario y regresa una lista de arboles
+    """
+    id_usuario = request.GET.get('id_usuario')
+    if not id_usuario:
+        return JsonResponse({"error": "Falta parametro id_usuario"}, status=400)
+    
+    try:
+        usuario = Usuario.objects.get(id=id_usuario)
+    except Usuario.DoesNotExist:
+        return JsonResponse({"error": "Usuario no encontrado"}, status=404)
+
+    arboles = Arbol.objects.filter(id_usuario=usuario)
+    data = []
+    for arbol in arboles:
+        data.append({
+            "id": arbol.id,
+            "tree_structure": arbol.tree_structure,
+            "text_column": arbol.text_column,
+            "archivo_parquet": arbol.archivo_parquet
+        })
+    return JsonResponse(data, safe=False)
 
 @csrf_exempt
 def new_tree(request : HttpRequest):
@@ -79,9 +175,8 @@ def new_tree(request : HttpRequest):
         df["id_data"] = range(len(df))
     df["id_node"] = 0 
     df["history_nodes"] = [[0] for _ in range(len(df))]
-    print(df.head())
     save_or_update_tree_s3(parquet_path, df)
-    return HttpResponse("hola gente hermosa")
+    return JsonResponse({"message": "Arbol creado exitosamente", "id_arbol": arbol.pk})
 
 def normalized_keys(d: dict) -> dict:
     """ Normaliza las claves de un diccionario a enteros """
@@ -151,7 +246,10 @@ def new_branches(request : HttpRequest):
     # actualizar la estructura del árbol en la base de datos
     arbol.tree_structure = tree.tree_structure
     arbol.save()
-    return HttpResponse("Ramas creadas exitosamente")
+    # actualizar la estructura del árbol en la base de datos
+    arbol.tree_structure = tree.tree_structure
+    arbol.save()
+    return JsonResponse({"message": "Ramas creadas exitosamente", "tree_structure": arbol.tree_structure})
 
 @csrf_exempt
 def prune_tree(request: HttpRequest):
@@ -220,4 +318,4 @@ def prune_tree(request: HttpRequest):
     arbol.tree_structure = tree.tree_structure
     arbol.save()
     
-    return HttpResponse(f"Poda exitosa. Nodo {id_node} y {len(all_childs)} descendientes fusionados al padre {parent_node}.")
+    return JsonResponse({"message": f"Poda exitosa. Nodo {id_node} y {len(all_childs)} descendientes fusionados al padre {parent_node}.", "tree_structure": arbol.tree_structure})

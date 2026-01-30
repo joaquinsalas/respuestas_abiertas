@@ -20,7 +20,10 @@ from django.urls import path
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('get_trees/', views.get_trees, name="get_trees"),
     path('new_tree/', views.new_tree, name="new_tree"),
     path('new_branches/', views.new_branches, name="new_branches"),
     path('prune_tree/', views.prune_tree, name="prune_tree"),
+    path('get_tree_structure/', views.get_tree_structure, name="get_tree_structure"),
+    path('get_node_data/', views.get_node_data, name="get_node_data"),
 ]
