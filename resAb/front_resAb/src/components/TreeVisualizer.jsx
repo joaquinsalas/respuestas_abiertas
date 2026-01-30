@@ -137,21 +137,12 @@ function TreeVisualizer({ treeId, userId, onClose, onRefresh }) {
     }, [treeId, userId])
 
     const onNodeClick = useCallback((event, node) => {
-        // Only show menu for leaf nodes? Requirement says "nodos hojas se pintaran de un color, cuando el usuario de click en un nodo hoja mostrara 2 opciones"
-        // I will check color or some flag. We styled leaves with #10b981
-        const isLeaf = node.style.background === '#10b981'
+        console.log("Node clicked:", node)
+        // Allow menu for ALL nodes now, per user request to fix interaction
+        // const isLeaf = node.style.background === '#10b981'
 
-        // Adjust: Logic says "show 2 options" for leaves. 
-        // Maybe we allow for all? But requirements specific about leaves.
-        // I'll stick to leaves for the menu as per prompt.
-        if (isLeaf) {
-            setSelectedNode(node)
-            // Position menu near the click
-            setMenuPosition({ x: event.clientX, y: event.clientY })
-        } else {
-            setSelectedNode(null)
-            setMenuPosition(null)
-        }
+        setSelectedNode(node)
+        setMenuPosition({ x: event.clientX, y: event.clientY })
     }, [])
 
     const handleBranch = async () => {
@@ -237,6 +228,8 @@ function TreeVisualizer({ treeId, userId, onClose, onRefresh }) {
                         onPaneClick={() => setMenuPosition(null)}
                         fitView
                         className="bg-slate-950"
+                        nodesDraggable={false}
+                        nodeClickDistance={15}
                     >
                         <Controls className="bg-slate-800 border-slate-700 fill-white text-white" />
                         <Background color="#334155" gap={16} />

@@ -62,7 +62,9 @@ def get_tree_structure(request: HttpRequest):
         arbol = Arbol.objects.get(id=id_arbol, id_usuario_id=id_usuario)
     except Arbol.DoesNotExist:
         return JsonResponse({"error": "Árbol no encontrado para este usuario"}, status=404)
-
+    for node_str in arbol.tree_structure:
+        if int(node_str) != 0:
+            arbol.tree_structure[node_str].pop(0)
     return JsonResponse(arbol.tree_structure, safe=True)
 
 @csrf_exempt
@@ -143,9 +145,9 @@ def new_tree(request : HttpRequest):
         nodo_history
         y los asocia a un usuario
     """
-    id_usuario :int = int(request.GET.get('id_usuario'))
-    text_column = request.GET.get('text')
-    id_column = request.GET.get('id_column', None)
+    id_usuario :int = int(request.POST.get('id_usuario'))
+    text_column = request.POST.get('text')
+    id_column = request.POST.get('id_column', None)
     csv_file = request.FILES.get('csv')
     if not csv_file:
         return HttpResponseNotFound("Archivo CSV no proporcionado")

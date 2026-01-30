@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import TreeVisualizer from './components/TreeVisualizer'
 
+// Set global base URL
+axios.defaults.baseURL = 'http://localhost:8000';
+
 function App() {
   const [userId, setUserId] = useState('')
   const [trees, setTrees] = useState([])
@@ -42,7 +45,7 @@ function App() {
 
     setUploading(true)
     try {
-      await axios.post('/new_tree/', formData, {
+      await axios.post('/new_tree/?id_usuario=' + userId, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
       alert("Tree created successfully!")
