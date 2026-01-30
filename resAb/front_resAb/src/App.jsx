@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import TreeVisualizer from './components/TreeVisualizer'
 
 function App() {
   const [userId, setUserId] = useState('')
   const [trees, setTrees] = useState([])
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [pruning, setPruning] = useState(false)
-  const [pruneResult, setPruneResult] = useState(null)
+
+  // Visualizer State
+  const [selectedTree, setSelectedTree] = useState(null)
 
   // Form states
   const [file, setFile] = useState(null)
@@ -53,51 +55,9 @@ function App() {
     }
   }
 
-  const findPrunableNode = (structure) => {
-    // Structure is {parent: [children]}. 
-    // We want a node that is a child.
-    // Let's pick the highest ID node that is not 0 (root).
-    // Keys are strings in JSON usually, need to parse.
-    if (!structure) return null
-
-    // Collect all nodes mentioned
-    let allNodes = new Set()
-    Object.keys(structure).forEach(k => {
-      allNodes.add(parseInt(k))
-      structure[k].forEach(child => allNodes.add(child))
-    })
-
-    // Sort descending
-    const sorted = Array.from(allNodes).sort((a, b) => b - a)
-    // Return first non-zero
-    return sorted.find(n => n !== 0) || null
-  }
-
-  const handleSelectTree = async (tree) => {
-    if (!confirm(`Do you want to Prune Tree #${tree.id}?`)) return
-
-    const targetNode = findPrunableNode(tree.tree_structure)
-    if (targetNode === null) {
-      alert("No prunable nodes found (Only root exists?)")
-      return
-    }
-
-    setPruning(true)
-    try {
-      const response = await axios.get(`/prune_tree/?id_arbol=${tree.id}&id_node=${targetNode}`)
-      setPruneResult({
-        message: response.data.message,
-        treeId: tree.id,
-        newStructure: response.data.tree_structure
-      })
-      // Refresh trees
-      fetchTrees()
-    } catch (error) {
-      console.error(error)
-      alert("Error pruning tree")
-    } finally {
-      setPruning(false)
-    }
+  // Modified to just select the tree, not auto-prune
+  const handleSelectTree = (tree) => {
+    setSelectedTree(tree)
   }
 
   return (
@@ -209,7 +169,7 @@ function App() {
                       {JSON.stringify(tree.tree_structure)}
                     </div>
                     <div className="mt-2 text-xs text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity uppercase font-bold tracking-wide">
-                      Click to Prune ✂️
+                      Click to Visualize 📊
                     </div>
                   </div>
                 ))}
@@ -218,34 +178,13 @@ function App() {
           </section>
         </div>
 
-        {/* Prune Results */}
-        {pruneResult && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-            <div className="bg-slate-800 border border-slate-600 rounded-2xl shadow-2xl max-w-2xl w-full p-8 relative">
-              <button
-                onClick={() => setPruneResult(null)}
-                className="absolute top-4 right-4 text-slate-400 hover:text-white"
-              >
-                ✕
-              </button>
-              <h3 className="text-3xl font-bold mb-4 text-green-400">Pruning Successful!</h3>
-              <p className="text-lg text-slate-200 mb-6">{pruneResult.message}</p>
-
-              <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 overflow-auto max-h-60">
-                <h4 className="text-sm font-bold text-slate-400 mb-2 uppercase">New Structure</h4>
-                <pre className="text-xs text-green-300 font-mono">
-                  {JSON.stringify(pruneResult.newStructure, null, 2)}
-                </pre>
-              </div>
-
-              <button
-                onClick={() => setPruneResult(null)}
-                className="mt-6 w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-lg transition"
-              >
-                Close
-              </button>
-            </div>
-          </div>
+        {/* Tree Visualizer Modal */}
+        {selectedTree && (
+          <TreeVisualizer
+            treeId={selectedTree.id}
+            userId={userId}
+            onClose={() => setSelectedTree(null)}
+          />
         )}
       </div>
     </div>
