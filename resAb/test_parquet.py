@@ -3,7 +3,7 @@ import pandas as pd
 from dotenv import load_dotenv
 load_dotenv()
 
-BUCKET = "user-trees"
+BUCKET = "user-graphs"
 fs = s3fs.S3FileSystem(
     key=os.getenv("AWS_ACCESS_KEY_ID"),
     secret=os.getenv("AWS_SECRET_ACCESS_KEY"),
