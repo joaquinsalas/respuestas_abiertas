@@ -25,4 +25,6 @@ urlpatterns = [
     path('opc_cut', views.opc_cut),
     path('new_category', views.confirm_new_category),
     path('sample', views.sample),
+    path('delete_tmp', views.delete_temp_embedding_endpoint),
+    path('get_categorized_data', views.get_categorized_data)
 ]
