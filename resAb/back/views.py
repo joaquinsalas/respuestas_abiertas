@@ -178,7 +178,13 @@ def search_similar(request: HttpRequest):
     })
 
 def select_n_random_values(n : int, first : int, last : int)-> list:
-    return [random.randint(first, last) for i in range(n)]
+    ls = []
+    for i in range(n):
+        x = random.randint(first, last)
+        while x in ls:
+            x = random.randint(first, last)
+        ls.append(x)
+    return ls
 
 @csrf_exempt
 def confirm_new_category(request : HttpRequest):
@@ -227,7 +233,7 @@ def sample(request : HttpRequest) -> HttpResponse:
 
     if type_sample == 0:
         #sobre todo los datos
-        data = read_tree_s3(f"{user_id}/{graph_id}/data.parquet")#type: ignore
+        data = read_tree_s3(f"{BASE_PATH}/data.parquet")#type: ignore
         size = data.shape[0]
         if random_sample == 1: # Random sampling
             sample_size = sample_size if sample_size < size else size
@@ -241,6 +247,7 @@ def sample(request : HttpRequest) -> HttpResponse:
     elif type_sample == 1:
         #sobre una cateogria
         try:
+            print(f"{BASE_PATH}/{category}.parquet")
             data = read_tree_s3(f"{BASE_PATH}/{category}.parquet")#type: ignore
         except Exception:
             return HttpResponseBadRequest("Categoria invalida")
@@ -272,9 +279,10 @@ def sample(request : HttpRequest) -> HttpResponse:
     
     # Format the output
     result = data_to_return[[graph.id_column, graph.text_column]].rename(
-        columns={graph.id_column: 'id', graph.text_column: 'value'}
+        columns={graph.id_column: 'id', graph.text_column: 'data'}
     )
-    return JsonResponse(result.to_dict("records"))
+    print(result)
+    return JsonResponse({"data" : result.to_dict("records")})
 
 def range_cos(min_cos : float, n_opc : int) -> list:
     """
