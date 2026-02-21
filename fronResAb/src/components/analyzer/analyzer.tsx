@@ -1,9 +1,9 @@
-import {useState, useEffect} from 'react'
+import {useState, useEffect, useCallback} from 'react'
 import './analyzer.css'
 import { ROUTES } from '../../routes.ts'
-import React, { useCallback, useRef } from 'react';
+//import React, { useCallback, useRef } from 'react';
 import {
-  Background,
+     applyNodeChanges, applyEdgeChanges,
   ReactFlow,
   useNodesState,
   useEdgesState,
@@ -259,18 +259,83 @@ export function ConfirmCategory({ user_id, graph_id, setComponent }: ConfirmCate
     )
 }
 
-function SectionGraph({graph_id} : any){
+function SectionGraph({exec,graph_id = 5} : any){
+    /*
+    const initialNodes = [
+  {
+    id: 'n1',
+    position: { x: 0, y: 0 },
+    data: { label: 'Node 1' },
+    type: 'input',
+  },
+  {
+    id: 'n2',
+    position: { x: 100, y: 100 },
+    data: { label: 'Node 2' },
+  },
+];*/
+    const [nodes, setNodes] = useState<Array<any>>([]);
+    const [edges, setEdges] = useState<Array<any>>([]);
+    
+    const onNodesChange = useCallback(()=>
+        (changes) => setNodes((nodeSnapshot) => applyNodeChanges(changes, nodeSnapshot))
+    ,[])
+    
+    const getNodesFormat = ({names} : {names : Array<string>})=> {
+        names.
+        return 
+    }
 
-    const getGraph = async ()=> {
-        let response = await fetch(`${ROUTES.get_graph}?graph_id=${graph_id}`);
-        if(!response.ok) console.error("error al obtener el grafo");
-        let structure_graph = await response.json();
-        
-    }   
+   useEffect(() => {
+        const getGraph = async () => {
+            try {
+                const response = await fetch(`${ROUTES.get_graph}?graph_id=${graph_id}`);
+                if (!response.ok) throw new Error("error al obtener el grafo");
+                
+                const structure_graph: Record<string, any> = await response.json();
+                const nodes_name: string[] = Object.keys(structure_graph);
+                
+                // IMPORTANTE: React Flow necesita una posición inicial (x, y) 
+                // para cada nodo o no se verán en pantalla.
+                const nuevosNodos: Node[] = nodes_name.map((name, index) => ({
+                    id: name,
+                    data: { label: name },
+                    position: { x: index * 150, y: index * 50 }, // Posición simple en diagonal
+                }));
+                console.log(structure_graph)
+                let newEdges = []
+                for(let i=0; i<nodes_name.length; i++)
+                {   
+                    let name=nodes_name[i]
+                    let currentRelations = structure_graph[name]
+                    if(currentRelations === 0) continue;
+                    let edgeNodesName : Array<any> = Object.keys(currentRelations);
+                    edgeNodesName.forEach((value, index) => {
+                    newEdges.push({id : `${nodes_name[i]}-${structure_graph[name][value]}`, source : name, target : structure_graph[name][value]})
+                    });
+                    //console.log(`${name} y ${structure_graph[name][currentRelations]} y ${currentRelations}`);
+                }
+                console.log(newEdges);
+                setEdges(newEdges);
+                setNodes(nuevosNodos);
+                
+            } catch (error) {
+                console.error(error);
+            }
+        };
+
+        getGraph();
+    }, [graph_id]); // Agregamos graph_id como dependencia por si cambia
+   
 
     return (
-        <div className='graph'>
-
+        <div className='graph' style={{ width: '100%', height: '100%' }}>
+            <ReactFlow 
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                fitView
+            />
         </div>
     )
 }

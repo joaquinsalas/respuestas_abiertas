@@ -270,7 +270,6 @@ def sample(request : HttpRequest) -> HttpResponse:
     elif type_sample == 1:
         #sobre una cateogria
         try:
-            print(f"{BASE_PATH}/{category}.parquet")
             data = read_tree_s3(f"{BASE_PATH}/{category}.parquet")#type: ignore
         except Exception:
             return HttpResponseBadRequest("Categoria invalida")
@@ -304,7 +303,6 @@ def sample(request : HttpRequest) -> HttpResponse:
     result = data_to_return[[graph.id_column, graph.text_column]].rename(
         columns={graph.id_column: 'id', graph.text_column: 'data'}
     )
-    print(result)
     return JsonResponse({"data" : result.to_dict("records"),
                          "total_items" : data.shape[0]})
 
@@ -356,11 +354,6 @@ def opc_cut(request : HttpRequest):
         answer.append({'id' : border[0], 'data' : border[2], 'sim' : float(border[1])})
     return JsonResponse( { 'data' : answer})
 
-def index(request : HttpRequest) -> HttpResponse:
-    archivo = request.FILES.get('archivo')
-    if archivo:
-        print(f"Archivo recibido: {archivo.name}")
-    return render(request, 'resAb/index.html')
 
 @csrf_exempt
 def get_categorized_data(request: HttpRequest) -> HttpResponse:
