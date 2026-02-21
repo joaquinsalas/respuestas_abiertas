@@ -422,6 +422,7 @@ def get_categorized_data(request: HttpRequest) -> HttpResponse:
 def get_full_graph(request: HttpRequest):
     """
     Vista para obtener la estructura completa de un grafo, mostrando las relaciones entre nodos.
+    Retorna una lista de nodos con sus IDs y una lista de aristas.
     """
     graph_id = request.GET.get("graph_id")
     if not graph_id:
@@ -434,34 +435,33 @@ def get_full_graph(request: HttpRequest):
         # Obtener todos los nodos del grafo.
         all_nodes = nodes.objects.filter(graph=graph_obj)
         
-        # Obtener todas las aristas de esos nodos (solo las que se originan en ellos).
-        # Hacemos un prefetch para optimizar.
-        edges = edge.objects.filter(from_node__in=all_nodes).select_related('from_node', 'to_node', 'relation')
+        # Obtener todas las aristas de esos nodos.
+        edges_objs = edge.objects.filter(from_node__in=all_nodes).select_related('from_node', 'to_node', 'relation')
 
-        graph_structure = {}
-
-        # Inicializamos la estructura para todos los nodos.
+        nodes_list = []
         for node in all_nodes:
-            graph_structure[node.node_name] = {}
+            nodes_list.append({
+                "id": node.id,
+                "name": node.node_name
+            })
 
-        # Llenamos con las transiciones existentes.
-        for e in edges:
-            from_name = e.from_node.node_name
-            to_name = e.to_node.node_name
-            relation_id = e.relation.id
-            graph_structure[from_name][relation_id] = to_name
-
-        # Para los nodos sin transiciones de salida, asignar 0.
-        for node_name, transitions in graph_structure.items():
-            if not transitions:
-                graph_structure[node_name] = 0
+        edges_list = []
+        for e in edges_objs:
+            edges_list.append({
+                "id": f"{e.from_node.id}-{e.to_node.id}",
+                "source": e.from_node.id,
+                "target": e.to_node.id,
+                "relation_id": e.relation.id
+            })
                 
-        return JsonResponse(graph_structure)
+        return JsonResponse({
+            "nodes": nodes_list,
+            "edges": edges_list
+        })
 
     except graphs.DoesNotExist:
         return HttpResponseBadRequest("El grafo no existe")
     except Exception as e:
-        # Consider logging the exception.
         return HttpResponse(f"Error inesperado: {e}", status=500)
 
 @csrf_exempt

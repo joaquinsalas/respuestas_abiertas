@@ -1,17 +1,23 @@
-import {useState, useEffect, useCallback} from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import './analyzer.css'
 import { ROUTES } from '../../routes.ts'
 //import React, { useCallback, useRef } from 'react';
 import {
-     applyNodeChanges, applyEdgeChanges,
-  ReactFlow,
-  useNodesState,
-  useEdgesState,
-  addEdge,
-  useReactFlow,
-  ReactFlowProvider,
+    applyNodeChanges, applyEdgeChanges,
+    ReactFlow,
+    useNodesState,
+    useEdgesState,
+    addEdge,
+    useReactFlow,
+    ReactFlowProvider,
+    BaseEdge,
+    getBezierPath,
+    type EdgeProps,
+    type Connection,
+    type Edge,
+    type Node,
 } from '@xyflow/react';
- 
+
 import '@xyflow/react/dist/style.css';
 
 
@@ -22,14 +28,14 @@ import '@xyflow/react/dist/style.css';
     { id: '4', data: 'Ejemplo 4' },
     { id: '5', data: 'Ejemplo 5' },
 ];]*/
-interface Data{
-    data : string,
-    id : string
+interface Data {
+    data: string,
+    id: string
 }
 
 
-function DisplayData({data, user_id, graph_id, setOptions, setTarget, setComponent, readOnly = false} : {data: Array<Data>, user_id: string, graph_id: string, setOptions : any, setTarget :any, setComponent:any, readOnly? : boolean}){
-    const handleOpcCut = async (target_id: string, target_data : string) => {
+function DisplayData({ data, user_id, graph_id, setOptions, setTarget, setComponent, readOnly = false }: { data: Array<Data>, user_id: string, graph_id: string, setOptions: any, setTarget: any, setComponent: any, readOnly?: boolean }) {
+    const handleOpcCut = async (target_id: string, target_data: string) => {
         if (readOnly) return;
         const url = `${ROUTES.opc_cut}?user_id=${user_id}&graph_id=${graph_id}&target_id=${target_id}&n_opc=3&min_similarity=0.80`;
         try {
@@ -39,7 +45,7 @@ function DisplayData({data, user_id, graph_id, setOptions, setTarget, setCompone
             }
             const result = await response.json();
             setOptions(result.data); //update the options to make de cut
-            setTarget({ data : target_data, id : target_id}) //update de values selected by the user
+            setTarget({ data: target_data, id: target_id }) //update de values selected by the user
             setComponent(2);//update component render
             console.log("Opciones de corte:", result);
         } catch (error) {
@@ -47,7 +53,7 @@ function DisplayData({data, user_id, graph_id, setOptions, setTarget, setCompone
         }
     };
 
-    return(
+    return (
         <div className='displayData'>
             {data.map(element => (
                 <div className={`displayData_data ${readOnly ? 'read-only' : ''}`} key={element.id} onClick={() => !readOnly && handleOpcCut(element.id, element.data)}>
@@ -63,8 +69,8 @@ interface ButtonTypeSampleProps {
     setRandom: (random: number) => void;
 }
 
-function ButtonTypeSample({ random, setRandom }: ButtonTypeSampleProps){
-    return(
+function ButtonTypeSample({ random, setRandom }: ButtonTypeSampleProps) {
+    return (
         <div className='buttonSample'>
             <button onClick={() => setRandom(1)} className={random === 1 ? 'active' : ''}>Aleatoria</button>
             <button onClick={() => setRandom(0)} className={random === 0 ? 'active' : ''}>Secuencial</button>
@@ -79,48 +85,49 @@ interface ButtonNavigateProps {
     setPage: (page: number) => void;
 }
 
-function ButtonNavigate({ page, pageSize, totalItems, setPage }: ButtonNavigateProps)
-{
+function ButtonNavigate({ page, pageSize, totalItems, setPage }: ButtonNavigateProps) {
     const totalPages = Math.ceil(totalItems / pageSize);
     const [valueUserPage, setValue] = useState(1);
 
-    return(
+    return (
         <div>
-            <button onClick={() => {setPage(prev => Math.max(1, prev - 1)); 
-                setValue(page -1);
+            <button onClick={() => {
+                setPage(prev => Math.max(1, prev - 1));
+                setValue(page - 1);
             }
             } disabled={page === 1}>Atras</button>
-            <button onClick={() => {setPage(prev => Math.min(totalPages, prev + 1)); setValue(page +1);}} disabled={page === totalPages}>Siguiente</button>
+            <button onClick={() => { setPage(prev => Math.min(totalPages, prev + 1)); setValue(page + 1); }} disabled={page === totalPages}>Siguiente</button>
             <p>
                 <input type="text" value={valueUserPage} onChange={(e) => {
                     setValue(e.target.value);
-                    setTimeout(()=>{
-                    const newPage = parseInt(e.target.value);
-                    if (!isNaN(newPage) && newPage >= 1 && newPage <= totalPages) {
-                        setPage(newPage);
-                        
-                    }},500)
-                    
-                }}/> - {totalPages}
+                    setTimeout(() => {
+                        const newPage = parseInt(e.target.value);
+                        if (!isNaN(newPage) && newPage >= 1 && newPage <= totalPages) {
+                            setPage(newPage);
+
+                        }
+                    }, 500)
+
+                }} /> - {totalPages}
             </p>
         </div>
     )
 }
 
-const ButtonNewSampleRandom : any = ({setQuery, query} : {setQuery : any, query : boolean})=>{
+const ButtonNewSampleRandom: any = ({ setQuery, query }: { setQuery: any, query: boolean }) => {
     return (
         <button onClick={(e) => {
             setQuery(!query);
             console.log(query);
-            
-            }}>
+
+        }}>
 
             Otros datos
         </button>
     )
 }
 
-function DisplaySample({setOptions, setTarget, setComponent, initialTypeSample = 0} : any){
+function DisplaySample({ setOptions, setTarget, setComponent, initialTypeSample = 0 }: any) {
     const [sampleData, setSampleData] = useState<Data[]>([]);
     const [random, setRandom] = useState<number>(1); // 1 for random, 0 for paginated
     const [typeSample, setTypeSample] = useState<number>(initialTypeSample); // 0 - all data, 1 - category, 2 - current category
@@ -129,15 +136,15 @@ function DisplaySample({setOptions, setTarget, setComponent, initialTypeSample =
     const [page, setPage] = useState<number>(1); // For pagination
     const [pageSize, setPageSize] = useState<number>(10); // For pagination
     const [totalItems, setTotalItems] = useState<number>(0); // Total items for pagination
-    const [query, setQuery] = useState(false); 
+    const [query, setQuery] = useState(false);
     // Dummy user_id and graph_id for now, these should come from context or props
-    const [user_id] = useState("1"); 
+    const [user_id] = useState("1");
     const [graph_id] = useState("5");
 
     useEffect(() => {
         const fetchData = async () => {
             const url = `${ROUTES.sample}?user_id=${user_id}&graph_id=${graph_id}&sample=${typeSample}&random=${random}&ss=${sampleSize}&page=${page}&page_size=${pageSize}&category=${category}`;
-            
+
             try {
                 let response = await fetch(url);
                 if (!response.ok) {
@@ -169,12 +176,12 @@ function DisplaySample({setOptions, setTarget, setComponent, initialTypeSample =
         <div className='Sample'>
             <h1>{typeSample === 2 ? "Datos actuales en revisión" : "Selecciona un dato"}</h1>
             <ButtonTypeSample random={random} setRandom={setRandom} />
-            <DisplayData data={sampleData} user_id={user_id} graph_id={graph_id} setOptions={setOptions} setTarget={setTarget} setComponent={setComponent} readOnly={readOnly}/>
+            <DisplayData data={sampleData} user_id={user_id} graph_id={graph_id} setOptions={setOptions} setTarget={setTarget} setComponent={setComponent} readOnly={readOnly} />
             {random === 0 && ( // Only show navigation buttons if in paginated mode
                 <ButtonNavigate page={page} pageSize={sampleSize} totalItems={totalItems} setPage={setPage} />
             )}
-            {random === 1 && (<ButtonNewSampleRandom setQuery={setQuery} query={query}/>)}
-            {typeSample===2 && <div><button onClick={e => setComponent(2)}>volver</button><button onClick={e => setComponent(4)}>Siguiente</button></div>}
+            {random === 1 && (<ButtonNewSampleRandom setQuery={setQuery} query={query} />)}
+            {typeSample === 2 && <div><button onClick={e => setComponent(2)}>volver</button><button onClick={e => setComponent(4)}>Siguiente</button></div>}
         </div>
     )
 }
@@ -245,10 +252,10 @@ export function ConfirmCategory({ user_id, graph_id, setComponent }: ConfirmCate
     return (
         <div className='confirm_category'>
             <h1>Nombra la nueva categoría</h1>
-            <input 
-                type="text" 
-                value={categoryName} 
-                onChange={(e) => setCategoryName(e.target.value)} 
+            <input
+                type="text"
+                value={categoryName}
+                onChange={(e) => setCategoryName(e.target.value)}
                 placeholder="Nombre de la categoría"
             />
             <div>
@@ -259,83 +266,154 @@ export function ConfirmCategory({ user_id, graph_id, setComponent }: ConfirmCate
     )
 }
 
-function SectionGraph({exec,graph_id = 5} : any){
-    /*
-    const initialNodes = [
-  {
-    id: 'n1',
-    position: { x: 0, y: 0 },
-    data: { label: 'Node 1' },
-    type: 'input',
-  },
-  {
-    id: 'n2',
-    position: { x: 100, y: 100 },
-    data: { label: 'Node 2' },
-  },
-];*/
-    const [nodes, setNodes] = useState<Array<any>>([]);
-    const [edges, setEdges] = useState<Array<any>>([]);
-    
-    const onNodesChange = useCallback(()=>
-        (changes) => setNodes((nodeSnapshot) => applyNodeChanges(changes, nodeSnapshot))
-    ,[])
-    
-    const getNodesFormat = ({names} : {names : Array<string>})=> {
-        names.
-        return 
+const CustomEdge1 = (props: EdgeProps) => {
+    const [edgePath] = getBezierPath(props);
+    return <BaseEdge path={edgePath} {...props} style={{ stroke: '#3b82f6', strokeWidth: 2 }} />;
+};
+const CustomEdge2 = (props: EdgeProps) => {
+    const [edgePath] = getBezierPath(props);
+    return <BaseEdge path={edgePath} {...props} style={{ stroke: '#10b981', strokeWidth: 2 }} />;
+};
+const CustomEdge3 = (props: EdgeProps) => {
+    const [edgePath] = getBezierPath(props);
+    return <BaseEdge path={edgePath} {...props} style={{ stroke: '#ef4444', strokeWidth: 2 }} />;
+};
+const CustomEdge4 = (props: EdgeProps) => {
+    const [edgePath] = getBezierPath(props);
+    return <BaseEdge path={edgePath} {...props} style={{ stroke: '#f59e0b', strokeWidth: 2 }} />;
+};
+const CustomEdge5 = (props: EdgeProps) => {
+    const [edgePath] = getBezierPath(props);
+    return <BaseEdge path={edgePath} {...props} style={{ stroke: '#8b5cf6', strokeWidth: 2 }} />;
+};
+
+const edgeTypes = {
+    '1': CustomEdge1,
+    '2': CustomEdge2,
+    '3': CustomEdge3,
+    '4': CustomEdge4,
+    '5': CustomEdge5,
+};
+
+function SectionGraph({ exec, graph_id = 5 }: any) {
+    const relations = {
+        1: { "type": "Se asocia con " },
+        2: { "type": "Es parte de" },
+        3: { "type": "Es causa de" },
+        4: { "type": "Es propiedad de" },
+        5: { "type": "Es un" }
     }
 
-   useEffect(() => {
+    const [nodes, setNodes, onNodesChange] = useNodesState([]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+    const [selectedRelationType, setSelectedRelationType] = useState('1');
+    const user_id = "1";
+
+    const onConnect = useCallback(
+        async (params: Connection) => {
+            if (!params.source || !params.target) return;
+
+            // Prepare API call
+            const body = {
+                user_id: user_id,
+                graph_id: graph_id.toString(),
+                node_id_1: parseInt(params.source),
+                node_id_2: parseInt(params.target),
+                connection_type: parseInt(selectedRelationType)
+            };
+
+            try {
+                const response = await fetch(ROUTES.add_edge, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+
+                if (response.ok) {
+                    // Success: update local state
+                    // Overwrite if edge between source and target already exists
+                    setEdges((eds) => {
+                        const filteredEdges = eds.filter(
+                            (e) => !(e.source === params.source && e.target === params.target)
+                        );
+                        const newEdge: Edge = {
+                            id: `${params.source}-${params.target}`,
+                            source: params.source!,
+                            target: params.target!,
+                            type: selectedRelationType,
+                        };
+                        return addEdge(newEdge, filteredEdges);
+                    });
+                } else {
+                    console.error("Failed to add edge in backend");
+                }
+            } catch (error) {
+                console.error("Error adding edge:", error);
+            }
+        },
+        [graph_id, selectedRelationType, setEdges, user_id]
+    );
+
+    useEffect(() => {
         const getGraph = async () => {
             try {
                 const response = await fetch(`${ROUTES.get_graph}?graph_id=${graph_id}`);
                 if (!response.ok) throw new Error("error al obtener el grafo");
-                
-                const structure_graph: Record<string, any> = await response.json();
-                const nodes_name: string[] = Object.keys(structure_graph);
-                
-                // IMPORTANTE: React Flow necesita una posición inicial (x, y) 
-                // para cada nodo o no se verán en pantalla.
-                const nuevosNodos: Node[] = nodes_name.map((name, index) => ({
-                    id: name,
-                    data: { label: name },
-                    position: { x: index * 150, y: index * 50 }, // Posición simple en diagonal
+
+                const data: { nodes: any[], edges: any[] } = await response.json();
+
+                const nuevosNodos: Node[] = data.nodes.map((node, index) => ({
+                    id: node.id.toString(),
+                    data: { label: node.name },
+                    position: { x: (index % 5) * 200, y: Math.floor(index / 5) * 100 },
                 }));
-                console.log(structure_graph)
-                let newEdges = []
-                for(let i=0; i<nodes_name.length; i++)
-                {   
-                    let name=nodes_name[i]
-                    let currentRelations = structure_graph[name]
-                    if(currentRelations === 0) continue;
-                    let edgeNodesName : Array<any> = Object.keys(currentRelations);
-                    edgeNodesName.forEach((value, index) => {
-                    newEdges.push({id : `${nodes_name[i]}-${structure_graph[name][value]}`, source : name, target : structure_graph[name][value]})
-                    });
-                    //console.log(`${name} y ${structure_graph[name][currentRelations]} y ${currentRelations}`);
-                }
-                console.log(newEdges);
-                setEdges(newEdges);
+
+                const newEdges: Edge[] = data.edges.map((e) => ({
+                    id: e.id,
+                    source: e.source.toString(),
+                    target: e.target.toString(),
+                    type: e.relation_id.toString(),
+                }));
+
                 setNodes(nuevosNodos);
-                
+                setEdges(newEdges);
+
             } catch (error) {
                 console.error(error);
             }
         };
 
         getGraph();
-    }, [graph_id]); // Agregamos graph_id como dependencia por si cambia
-   
+    }, [graph_id, setNodes, setEdges]);
 
     return (
-        <div className='graph' style={{ width: '100%', height: '100%' }}>
-            <ReactFlow 
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                fitView
-            />
+        <div className='graph' style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <div className="relation-selector" style={{ padding: '10px', background: '#f0f0f0', display: 'flex', gap: '10px' }}>
+                <span>Tipo de relación:</span>
+                {Object.entries(relations).map(([id, rel]) => (
+                    <label key={id} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                        <input
+                            type="radio"
+                            name="relationType"
+                            value={id}
+                            checked={selectedRelationType === id}
+                            onChange={(e) => setSelectedRelationType(e.target.value)}
+                        />
+                        {rel.type}
+                    </label>
+                ))}
+            </div>
+            <div style={{ flex: 1 }}>
+                <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onConnect={onConnect}
+                    edgeTypes={edgeTypes}
+                    fitView
+                />
+            </div>
         </div>
     )
 }
@@ -352,14 +430,14 @@ function SectionDesk() {
             {currentComponent === 1 && <DisplaySample setOptions={setOptionsCut} setComponent={setCurrentComponent} setTarget={setTarget} />}
             {currentComponent === 2 && target && <DisplayOptionsCut dataTarget={target.data} dataTargetID={target.id} options={optionsCut} setComponent={setCurrentComponent} user_id={user_id} graph_id={graph_id} />}
             {currentComponent === 3 && <DisplaySample setOptions={setOptionsCut} setComponent={setCurrentComponent} setTarget={setTarget} initialTypeSample={2} />}
-            {currentComponent === 4 && <ConfirmCategory setComponent={setCurrentComponent} user_id={user_id} graph_id={graph_id}/>}
+            {currentComponent === 4 && <ConfirmCategory setComponent={setCurrentComponent} user_id={user_id} graph_id={graph_id} />}
         </section>
     )
 }
 
 export function Analyzer() {
 
-    return(
+    return (
         <div className='analyzer'>
             <SectionGraph />
             <SectionDesk />
