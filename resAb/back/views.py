@@ -77,12 +77,15 @@ def new_analysis_request(request: HttpRequest):
     user_id = request.POST.get("user_id")
     text_column = request.POST.get("text_column")
     id_column = request.POST.get("id_column", None)
-
+    name = request.POST.get("name")
     if not user_id:
         return HttpResponseBadRequest("user_id es requerido")
 
     if not text_column:
         return HttpResponseBadRequest("text_column es requerido")
+
+    if not name:
+        return HttpResponseBadRequest("name es requerido")
 
     try:
         user = users.objects.get(id=user_id)
@@ -97,7 +100,7 @@ def new_analysis_request(request: HttpRequest):
         return HttpResponseBadRequest("Formato de archivo no permitido")
 
     #create new graph on the DB
-    graph = graphs(id_user=user)
+    graph = graphs(id_user=user, name=name)
     graph.save()
     pk = graph.pk
     BASE_PATH = f"{user_id}/{pk}"
