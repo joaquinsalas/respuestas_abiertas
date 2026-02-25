@@ -34,7 +34,7 @@ interface Data {
 }
 
 
-function DisplayData({ data, user_id, graph_id, setOptions, setTarget, setComponent, readOnly = false }: { data: Array<Data>, user_id: string, graph_id: string, setOptions: any, setTarget: any, setComponent: any, readOnly?: boolean }) {
+function DisplayData({ data, setTarget, setComponent, readOnly = false }: { data: Array<Data>, setTarget: any, setComponent: any, readOnly?: boolean }) {
     const handleOpcCut = (target_id: string, target_data: string) => {
         if (readOnly) return;
         setTarget({ data: target_data, id: target_id });
@@ -114,12 +114,12 @@ const ButtonNewSampleRandom: any = ({ setQuery, query }: { setQuery: any, query:
     )
 }
 
-function DisplaySample({ setOptions, setTarget, setComponent, initialTypeSample = 0, graph_id}: any) {
+function DisplaySample({ setTarget, setComponent, initialTypeSample = 0, graph_id, categoryProp= ""}: any) {
     const [sampleData, setSampleData] = useState<Data[]>([]);
     const [random, setRandom] = useState<number>(1); // 1 for random, 0 for paginated
     const [typeSample, setTypeSample] = useState<number>(initialTypeSample); // 0 - all data, 1 - category, 2 - current category
     const [sampleSize, setSampleSize] = useState<number>(10); // For random sampling
-    const [category, setCategory] = useState<string>(""); // For category-based sampling
+    const [category, setCategory] = useState<string>(categoryProp); // For category-based sampling
     const [page, setPage] = useState<number>(1); // For pagination
     const [pageSize, setPageSize] = useState<number>(10); // For pagination
     const [totalItems, setTotalItems] = useState<number>(0); // Total items for pagination
@@ -154,14 +154,14 @@ function DisplaySample({ setOptions, setTarget, setComponent, initialTypeSample 
         fetchData();
     }, [random, typeSample, sampleSize, category, page, pageSize, user_id, graph_id, query]); // Dependencies for useEffect
     let readOnly = false;
-    if (typeSample === 2) {
+    if (typeSample === 2 || typeSample === 1) {
         readOnly = true;
     }
     return (
         <div className='Sample'>
             {typeSample !== 2 && <h1>Selecciona un dato</h1>}
             <ButtonTypeSample random={random} setRandom={setRandom} />
-            <DisplayData data={sampleData} user_id={user_id} graph_id={graph_id} setOptions={setOptions} setTarget={setTarget} setComponent={setComponent} readOnly={readOnly} />
+            <DisplayData data={sampleData} setTarget={setTarget} setComponent={setComponent} readOnly={readOnly} />
             {random === 0 && ( // Only show navigation buttons if in paginated mode
                 <ButtonNavigate page={page} pageSize={sampleSize} totalItems={totalItems} setPage={setPage} />
             )}
@@ -250,7 +250,6 @@ function ReviewManager({ user_id, graph_id, target, setComponent }: any) {
                                 graph_id={graph_id} 
                                 initialTypeSample={2} 
                                 setComponent={setComponent}
-                                setOptions={() => {}}
                                 setTarget={() => {}}
                             />
                         ) : (
@@ -361,6 +360,9 @@ const MenuRightClick = ({
   exec,
   onPaneClick,
   setExec,
+  setData,
+  category,
+  setShowData,
   ...props
 } : any )=> {
     
@@ -378,6 +380,12 @@ const MenuRightClick = ({
             setExec(!exec);
         }
     }
+
+    const handlerViewData = ()=>{
+        onPaneClick();
+        setData(category);
+        setShowData(true);
+    }
  
 
  
@@ -387,7 +395,8 @@ const MenuRightClick = ({
       className="context-menu"
       {...props}
     >
-      <button onClick={handlerDelete}>delete</button>
+      <button onClick={handlerDelete}>borrar</button>
+      <button onClick={handlerViewData}>ver</button>
     </div>
   );
 }
@@ -408,6 +417,8 @@ function SectionGraph({ exec = false, graph_id }: any) {
     const [menu, setMenu] = useState(null);
     const [nodeDeleted, setNodeDeleted] = useState(false);
     const [edgeDeleted, setEdgeDeleted] = useState(false);
+    const [showData, setShowData] = useState(false);
+    const [category, setCategory] = useState("");
     const ref = useRef<HTMLDivElement>(null);
     const user_id = "1";
     
@@ -491,17 +502,18 @@ function SectionGraph({ exec = false, graph_id }: any) {
   const onNodeContextMenu = useCallback((event, nodo) => {
     event.preventDefault();
     const pane = ref.current.getBoundingClientRect();
-    
+    console.log(nodo);
     setMenu({
         id: nodo.id,
         top:    event.clientY - pane.top  < pane.height - 200 && event.clientY - pane.top,
         left:   event.clientX - pane.left < pane.width  - 200 && event.clientX - pane.left,
         right:  event.clientX - pane.left >= pane.width  - 200 && pane.width  - (event.clientX - pane.left),
         bottom: event.clientY - pane.top  >= pane.height - 200 && pane.height - (event.clientY - pane.top),
+        category : nodo.data.label,
     });
 }, [setMenu]);
 
-      const onPaneClick = useCallback(() => setMenu(null), [setMenu]);
+      const onPaneClick = useCallback(() => {setMenu(null); setShowData(false);}, [setMenu]);
 
 
     const onEdgeClick = useCallback((event, edge)=>{
@@ -549,16 +561,16 @@ function SectionGraph({ exec = false, graph_id }: any) {
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
-                    
                     edgeTypes={edgeTypes}
                     onNodeContextMenu={onNodeContextMenu}
                     fitView
                     onPaneClick={onPaneClick}
                     onEdgeClick={onEdgeClick}
                 >
-                    {menu && <MenuRightClick {...menu} onPaneClick={onPaneClick} graph_id={graph_id} setExec={setNodeDeleted} exec={nodeDeleted}/>}
+                    {menu && <MenuRightClick {...menu} onPaneClick={onPaneClick} graph_id={graph_id} setExec={setNodeDeleted} exec={nodeDeleted} setData={setCategory} setShowData={setShowData}/>}
                     <Background />
                 </ReactFlow>
+                {showData && <DisplaySample initialTypeSample={1} graph_id={graph_id} categoryProp={category}/>}
             </div>
         </div>
     )
@@ -572,7 +584,7 @@ function SectionDesk({exec, setExec, user_id, graph_id} : any) {
     
     return (
         <section className='desk'>
-            {currentComponent === 1 && <DisplaySample setOptions={setOptionsCut} setComponent={setCurrentComponent} setTarget={setTarget} graph_id={graph_id} />}
+            {currentComponent === 1 && <DisplaySample setComponent={setCurrentComponent} setTarget={setTarget} graph_id={graph_id} />}
             {currentComponent === 2 && target && <ReviewManager user_id={user_id} graph_id={graph_id} target={target} setComponent={setCurrentComponent} />}
             {currentComponent === 4 && <ConfirmCategory setComponent={setCurrentComponent} user_id={user_id} graph_id={graph_id} setExec={setExec} exec={exec}/>}
         </section>
