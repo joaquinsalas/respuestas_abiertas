@@ -10,7 +10,6 @@ interface optionGraphsProps{
 const OptionGraphs : React.FC = ({graphs, setGraph, setPage} : optionGraphsProps)=> {
     
     const handlerClick = (e)=> {
-        console.log(e.target.value);
         setGraph(e.target.value);
         setPage(2);
     }
@@ -25,7 +24,6 @@ const OptionGraphs : React.FC = ({graphs, setGraph, setPage} : optionGraphsProps
 }
 
 const OptionsColumnIndex : React.FC = ({columns} : {columns: Array<string>})=> {
-    console.log("me renderizo");
     return(
          <div id='uploadCSVIndexColumn'>
                 <select name="columns" id="columns-select">
@@ -74,13 +72,11 @@ const UploadCSV : React.FC = ()=> {
             });
         
             const data = await response.json();
-            console.log(data);
           };
       
           sendRequest();
         };
 
-    console.log(isColumnIndex);
     return(
 
         <dialog id='uploadCSV'>
@@ -116,7 +112,6 @@ export const ListGraphs : React.FC= ({user_id= 1, setPage, setGraph} : any)=> {
             const response = await fetch(`${ROUTES.get_graphs}?user_id=${user_id}`);
             const data = await response.json();
             setGraphs(data);
-            console.log(data);
         }
         getGraphs();
     },[]);

@@ -7,6 +7,7 @@ from .embeddings import get_embeddings_main
 from .models import users, graphs, edge, nodes, relationship
 import numpy as np
 import json
+from django.db.models import Q
 
 
 # Create your views here.
@@ -452,7 +453,7 @@ def get_full_graph(request: HttpRequest):
         edges_list = []
         for e in edges_objs:
             edges_list.append({
-                "id": f"{e.from_node.id}-{e.to_node.id}",
+                "id":e.id,
                 "source": e.from_node.id,
                 "target": e.to_node.id,
                 "relation_id": e.relation.id
@@ -612,3 +613,30 @@ def delete_node(request: HttpRequest):
         return HttpResponseBadRequest("Cuerpo de la solicitud JSON inválido")
     except Exception as e:
         return HttpResponse(f"Error inesperado: {e}", status=500)
+
+@csrf_exempt
+def delete_edge(request : HttpRequest):
+    if request.method not in ["POST", "DELETE"]:
+      return HttpResponseBadRequest("Método no permitido")
+    if request.content_type == 'application/json':
+        body = json.loads(request.body)
+        user_id = body.get("user_id")
+        graph_id = body.get("graph_id")
+        #edge_id = body.get("edge_id")
+        from_node_id = body.get("from_node_id")
+        to_node_id = body.get("to_node_id")
+    else: # Soporte para form-data
+        user_id = request.POST.get("user_id")
+        graph_id = request.POST.get("graph_id")
+        #edge_id = request.POST.get("edge_id")
+        from_node_id = request.POST.get("from_node_id")
+        to_node_id = request.POST.get("to_node_id")
+    if not all([user_id, graph_id, from_node_id, to_node_id]):
+        return HttpResponseBadRequest(f"Faltan parámetros obligatorios: {[user_id, graph_id, from_node_id, to_node_id]}")
+    user = users.objects.get(id=user_id)
+    graph = graphs.objects.get(id=graph_id, id_user=user)
+    from_node_id = nodes.objects.get(id=from_node_id, graph=graph)
+    to_node_id = nodes.objects.get(id=to_node_id, graph=graph)
+    edge_selected = edge.objects.get(Q(Q(from_node=from_node_id) & Q(to_node=to_node_id)) | Q(Q(from_node=to_node_id) & Q(to_node=from_node_id)))
+    edge_selected.delete()
+    return HttpResponse(status=204)

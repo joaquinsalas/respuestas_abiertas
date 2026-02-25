@@ -18,7 +18,6 @@ import {
     type Edge,
     type Node,
 } from '@xyflow/react';
-
 import '@xyflow/react/dist/style.css';
 
 
@@ -171,7 +170,6 @@ function DisplaySample({ setOptions, setTarget, setComponent, initialTypeSample 
                 <div style={{marginTop: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px'}}>
                     <div style={{display: 'flex', gap: '10px'}}>
                         <button onClick={e => setComponent(1)}>volver</button>
-                        <button onClick={e => setComponent(4)}>Siguiente</button>
                     </div>
                     <p className='total-count'>cantidad de respuestas: {totalItems}</p>
                 </div>
@@ -238,6 +236,9 @@ function ReviewManager({ user_id, graph_id, target, setComponent }: any) {
                         className="vertical-slider"
                     />
                 </div>
+                <p>
+                    {target.data}
+                </p>
                 <div className="display-area">
                     {loading ? (
                         <div className="loader-container">
@@ -392,6 +393,7 @@ const MenuRightClick = ({
 }
 
 function SectionGraph({ exec = false, graph_id }: any) {
+
     const relations = {
         1: { "type": "Se asocia con " },
         2: { "type": "Es parte de" },
@@ -405,6 +407,7 @@ function SectionGraph({ exec = false, graph_id }: any) {
     const [selectedRelationType, setSelectedRelationType] = useState('1');
     const [menu, setMenu] = useState(null);
     const [nodeDeleted, setNodeDeleted] = useState(false);
+    const [edgeDeleted, setEdgeDeleted] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
     const user_id = "1";
     
@@ -483,26 +486,45 @@ function SectionGraph({ exec = false, graph_id }: any) {
         };
 
         getGraph();
-    }, [graph_id, setEdges, setNodes, exec, nodeDeleted]);
+    }, [graph_id, setEdges, setNodes, exec, nodeDeleted, edgeDeleted]);
 
-  
-    const onNodeContextMenu = useCallback((event,nodo)=>{
-        event.preventDefault();
-        const pane = ref.current.getBoundingClientRect(); 
-        console.log(nodo)
-         setMenu({
-            id: nodo.id,
-            top: event.clientY < pane.height - 100 && event.clientY,
-            left: event.clientX < pane.width - 100 && event.clientX,
-            right: event.clientX >= pane.width - 200 && pane.width - event.clientX,
-            bottom:
-              event.clientY >= pane.height - 200 && pane.height - event.clientY,
-            });
-    }
-    ,[setMenu]);
+  const onNodeContextMenu = useCallback((event, nodo) => {
+    event.preventDefault();
+    const pane = ref.current.getBoundingClientRect();
+    
+    setMenu({
+        id: nodo.id,
+        top:    event.clientY - pane.top  < pane.height - 200 && event.clientY - pane.top,
+        left:   event.clientX - pane.left < pane.width  - 200 && event.clientX - pane.left,
+        right:  event.clientX - pane.left >= pane.width  - 200 && pane.width  - (event.clientX - pane.left),
+        bottom: event.clientY - pane.top  >= pane.height - 200 && pane.height - (event.clientY - pane.top),
+    });
+}, [setMenu]);
 
       const onPaneClick = useCallback(() => setMenu(null), [setMenu]);
 
+
+    const onEdgeClick = useCallback((event, edge)=>{
+        const deleteEdge= async() =>{
+            let request = await fetch(ROUTES.delete_edge, {
+                method : 'POST',
+                  headers: {
+                        "Content-Type": "application/json",  // <- indica que envías JSON
+                    },
+                body : JSON.stringify({
+                    user_id : user_id,
+                    graph_id : graph_id,
+                    from_node_id : edge.target,
+                    to_node_id : edge.source
+
+                })
+            });
+            if(!request.ok) alert("error al eliminar la conexion, intente mas tarde");
+            setEdgeDeleted(prev  => !prev);
+            console.log(edgeDeleted)
+        }
+        deleteEdge();
+    },[])
     return (
         <div className='graph' ref={ref} style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
             <div className="relation-selector" style={{ padding: '10px', background: '#f0f0f0', display: 'flex', gap: '10px' }}>
@@ -527,11 +549,12 @@ function SectionGraph({ exec = false, graph_id }: any) {
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
-                    ref={ref} 
+                    
                     edgeTypes={edgeTypes}
                     onNodeContextMenu={onNodeContextMenu}
                     fitView
                     onPaneClick={onPaneClick}
+                    onEdgeClick={onEdgeClick}
                 >
                     {menu && <MenuRightClick {...menu} onPaneClick={onPaneClick} graph_id={graph_id} setExec={setNodeDeleted} exec={nodeDeleted}/>}
                     <Background />
@@ -580,7 +603,7 @@ export function Analyzer({graph, setPage} : any) {
         <div className='analyzer'>
             <button onClick={()=> setPage(1)}>regresar</button>
             <button onClick={handlerClick}>Exportar a CSV</button>
-            <SectionGraph exec={exec} user_id={graph.user_id} graph_id={graph} />
+                <SectionGraph exec={exec} user_id={graph.user_id} graph_id={graph} />
             <SectionDesk setExec={setExec} exec={exec} user_id={1} graph_id={graph} />
         </div>
 
