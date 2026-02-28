@@ -1,143 +1,311 @@
-/*desktop display*/
-.graph{
-    flex: 1;
+/* ─── Analyzer Layout ────────────────────────────────────────────────────────── */
+
+.analyzer {
+  display: flex;
+  width: 100vw;
+  height: calc(100vh - 52px);
+  overflow: hidden;
+  background-color: var(--color-bg);
 }
 
-.desk{
-    flex: 1;
+.graph {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  min-width: 0;
 }
 
-.analyzer{
-    width: 100vw;
-    height: 100vh;
-    display: flex;
+.desk {
+  width: 340px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  overflow: hidden;
 }
+
+/* ─── Relation Selector ──────────────────────────────────────────────────────── */
+
+.relation-selector {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.relation-selector > span {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.relation-selector label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  user-select: none;
+  margin-bottom: 0;
+  font-weight: var(--font-weight-normal);
+}
+
+.relation-selector label:hover {
+  color: var(--color-text);
+}
+
+.relation-selector input[type="radio"] {
+  accent-color: var(--color-primary);
+  cursor: pointer;
+  width: auto;
+  display: inline;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.relation-selector input[type="radio"]:focus {
+  box-shadow: none;
+}
+
+/* ─── Context Menu ───────────────────────────────────────────────────────────── */
 
 .context-menu {
-    position: absolute;
-    z-index: 10;
-    background: white;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    padding: 4px;
+  position: absolute;
+  z-index: 300;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1);
+  box-shadow: var(--shadow-lg);
+  min-width: 130px;
 }
 
 .context-menu button {
-    background: none;
-    border: none;
-    padding: 8px 12px;
-    text-align: left;
-    cursor: pointer;
-    font-size: 14px;
+  display: flex;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  border-radius: var(--radius-sm);
+  justify-content: flex-start;
 }
 
 .context-menu button:hover {
-    background-color: #f0f0f0;
+  background-color: var(--color-surface-2);
+  border-color: transparent;
+  transform: none;
+  box-shadow: none;
 }
 
-/* Review Manager Styles */
+.context-menu button.btn-danger {
+  color: var(--color-destructive);
+  border-color: transparent !important;
+  background: transparent !important;
+}
+
+.context-menu button.btn-danger:hover {
+  background-color: var(--color-destructive-muted) !important;
+}
+
+/* ─── Confirm Category ───────────────────────────────────────────────────────── */
+
+.confirm-category {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  height: 100%;
+}
+
+.confirm-category h1 {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.confirm-category-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: auto;
+}
+
+/* ─── Review Manager ─────────────────────────────────────────────────────────── */
+
 .review-manager {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 20px;
-    background-color: #f0f2f5;
-    border-radius: 20px;
-    margin: 10px;
-    height: 90%;
-    border: 2px solid #333;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.review-manager-top {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
 }
 
 .create-category-btn {
-    padding: 10px 40px;
-    border-radius: 15px;
-    border: 2px solid #333;
-    background: white;
-    font-size: 1.1em;
-    cursor: pointer;
-    margin-bottom: 20px;
-    width: 80%;
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  justify-content: center;
 }
 
 .review-layout {
-    display: flex;
-    width: 100%;
-    flex: 1;
-    gap: 20px;
+  display: flex;
+  flex: 1;
+  overflow: hidden;
 }
 
-.slider-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
+/* Vertical slider column */
+.slider-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5) var(--space-3);
+  gap: var(--space-3);
+  border-right: 1px solid var(--color-border);
+  width: 64px;
+  flex-shrink: 0;
 }
 
 .vertical-slider {
-    writing-mode: bt-lr; /* IE */
-    -webkit-appearance: slider-vertical; /* WebKit */
-    width: 8px;
-    height: 200px;
-    padding: 0 24px;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 4px;
+  height: 160px;
+  cursor: pointer;
+  -webkit-appearance: slider-vertical;
+  appearance: slider-vertical;
+  padding: 0;
+  border: none;
+  box-shadow: none;
 }
 
-.display-area {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+.vertical-slider:focus {
+  box-shadow: none;
+  border: none;
+}
+
+.similarity-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.similarity-input {
+  width: 52px;
+  padding: var(--space-1) var(--space-2);
+  text-align: center;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  border-radius: var(--radius-sm);
+}
+
+/* Target text + results area */
+.review-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.review-target {
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.review-target-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: var(--space-2);
+}
+
+.review-target-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  line-height: var(--line-height-relaxed);
+}
+
+.review-results {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .loader-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 200px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+  padding: var(--space-8);
 }
 
 .loader {
-    border: 8px solid #f3f3f3;
-    border-top: 8px solid #3498db;
-    border-radius: 50%;
-    width: 60px;
-    height: 60px;
-    animation: spin 2s linear infinite;
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+  to { transform: rotate(360deg); }
 }
 
-.total-count {
-    margin-top: auto;
-    font-size: 0.9em;
-    color: #666;
+.review-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: var(--space-8);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+  line-height: var(--line-height-relaxed);
 }
 
-/* Override DisplaySample inside ReviewManager */
-.review-manager .Sample {
-    width: 100%;
-    background: transparent;
-    border: none;
-    box-shadow: none;
+/* ─── ReactFlow Overrides ────────────────────────────────────────────────────── */
+
+.react-flow__background {
+  background-color: var(--color-bg) !important;
 }
 
-.review-manager .Sample h1 {
-    display: none; /* Hide the h1 because we have "Crear categoria" */
+.react-flow__node-default {
+  background-color: var(--color-surface) !important;
+  border: 1px solid var(--color-border) !important;
+  color: var(--color-text) !important;
+  border-radius: var(--radius-md) !important;
+  font-size: var(--font-size-sm) !important;
+  font-family: var(--font-sans) !important;
+  box-shadow: var(--shadow-sm) !important;
 }
 
-.review-manager .displayData {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    width: 100%;
-}
-
-.review-manager .displayData_data {
-    border: 2px solid #333;
-    border-radius: 10px;
-    padding: 8px 15px;
-    background: white;
+.react-flow__node-default.selected {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 2px var(--color-primary-muted) !important;
 }

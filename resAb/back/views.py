@@ -155,6 +155,7 @@ def new_analysis_request(request):
     graph.save()
     return Response({
         "status": "ok",
+        "graph_id": pk,
         "filename": file.name,
         "size": file.size,
     })

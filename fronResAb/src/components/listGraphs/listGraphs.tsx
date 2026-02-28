@@ -1,124 +1,227 @@
-import {React, useEffect, useState} from 'react'
-import {ROUTES} from '../../routes.ts'
+import { useEffect, useState } from 'react'
+import { ROUTES } from '../../routes.ts'
 import { useAuth } from '../../auth/AuthContext.tsx'
+import './listGraphs.css'
 
-interface optionGraphsProps{
-    graphs : Array<{name : string, id : string | number, date : any}>
-    setPage : (value : number)=> void,
-    setGraph : (value : number | string)=> void,
+interface Graph {
+    name: string;
+    id: string | number;
+    date: any;
 }
 
-const OptionGraphs : React.FC = ({graphs, setGraph, setPage} : optionGraphsProps)=> {
+/* ─── Upload Dialog ──────────────────────────────────────────────────────────── */
 
-    const handlerClick = (e)=> {
-        setGraph(e.target.value);
-        setPage(2);
-    }
-
-    return (
-        <div>
-            {graphs.sort((a,b)=> b.date - a.date).map((graph)=> (
-                <button value={graph.id} onClick={handlerClick}>{graph.name}</button>
-            ))}
-        </div>
-    )
+interface UploadCSVProps {
+    setPage: (v: number) => void;
+    setGraph: (v: number | string) => void;
 }
 
-const OptionsColumnIndex : React.FC = ({columns} : {columns: Array<string>})=> {
-    return(
-         <div id='uploadCSVIndexColumn'>
-                <select name="columns" id="columns-select">
-                    ¿Qué columnas es el indice?
-                    {columns.map((col, index)=> (
-                        <option key={index} value={col}>{col}</option>
-                    ))}
-                </select>
-            </div>
-    )
-}
-
-const UploadCSV : React.FC = ()=> {
+const UploadCSV = ({ setPage, setGraph }: UploadCSVProps) => {
     const { authFetch } = useAuth();
-    const [columns, setColumns] = useState([]);
+    const [columns, setColumns] = useState<string[]>([]);
     const [isColumnIndex, setIsColumnIndex] = useState(false);
-    const [csvFile, setCsvFile] = useState(null);
-    const [columnsSelected, setColumnsSelected] = useState("");
-    const reader = new FileReader();
-    const [nameAnalysis, setNameAnalysis] = useState("");
+    const [csvFile, setCsvFile] = useState<File | null>(null);
+    const [columnsSelected, setColumnsSelected] = useState('');
+    const [nameAnalysis, setNameAnalysis] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [fileName, setFileName] = useState('');
 
-    const handlerFile = (e)=> {
-        const file = e.target.files[0];
-        reader.onload = (event)=> {
-            const csvData = event.target.result;
+    const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setFileName(file.name);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const csvData = event.target?.result as string;
             setCsvFile(file);
-            const headers = csvData.split('\n')[0].split(',');
+            const headers = csvData.split('\n')[0].split(',').map(h => h.trim());
             setColumns(headers);
             setColumnsSelected(headers[0]);
-        }
-        reader.readAsText(file);
-    }
-
-    const handlerSubmit = (e)=> {
-        const sendRequest = async () => {
-            const formData = new FormData();
-            if(csvFile) formData.append("file", csvFile);
-            formData.append("text_column", columnsSelected);
-            formData.append("name", nameAnalysis);
-            if(isColumnIndex) formData.append("id_column", isColumnIndex.toString());
-
-            await authFetch(ROUTES.upload_csv, {
-                method: "POST",
-                body: formData,
-            });
         };
-        sendRequest();
+        reader.readAsText(file);
     };
 
-    return(
-        <dialog id='uploadCSV'>
-            <div>
-                <label htmlFor="csv-upload">Subir CSV</label>
-                <input id="csv-upload" type="file" accept=".csv" onChange={handlerFile} />
-            </div>
-            <div>
-                <label htmlFor="name-analysis">Nombre del análisis</label>
-                <input id="name-analysis" type="text" value={nameAnalysis} onChange={(e)=> setNameAnalysis(e.target.value)}/>
-            </div>
-            <div>
-                <select name="columns" id="columns-select" onChange={(e)=> setColumnsSelected(e.target.value)}>
-                    ¿Qué columnas quieres analizar?
-                    {columns.map((col, index)=> (
-                        <option key={index} value={col}>{col}</option>
-                    ))}
-                </select>
-            </div>
-            <label htmlFor="column-index-checkbox">¿Usar columna como índice?</label>
-            <input id="column-index-checkbox" type="checkbox" onChange={()=> setIsColumnIndex(!isColumnIndex)}/>
-            {isColumnIndex && (<OptionsColumnIndex columns={columns}/> )}
-            <button onClick={handlerSubmit}>Enviar </button>
-            <button onClick={()=> document.getElementById('uploadCSV')?.close()}>Cancelar</button>
-        </dialog>
-    )
-}
+    const handleSubmit = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        if (!csvFile || !nameAnalysis) return;
+        setLoading(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', csvFile);
+            formData.append('text_column', columnsSelected);
+            formData.append('name', nameAnalysis);
+            if (isColumnIndex) formData.append('id_column', columnsSelected);
 
-export const ListGraphs : React.FC = ({setPage, setGraph} : any)=> {
-    const { authFetch } = useAuth();
-    const [graphs, setGraphs] = useState([]);
+            const response = await authFetch(ROUTES.upload_csv, {
+                method: 'POST',
+                body: formData,
+            });
 
-    useEffect(()=> {
-        const getGraphs = async ()=> {
-            const response = await authFetch(ROUTES.get_graphs);
-            const data = await response.json();
-            setGraphs(data);
+            if (response.ok) {
+                const data = await response.json();
+                (document.getElementById('uploadCSV') as HTMLDialogElement)?.close();
+                setGraph(data.graph_id);
+                setPage(2);
+            }
+        } finally {
+            setLoading(false);
         }
-        getGraphs();
-    },[]);
+    };
 
     return (
-        <div>
-            <button onClick={()=> document.getElementById('uploadCSV')?.showModal()}>Nuevo Análisis</button>
-            <OptionGraphs graphs={graphs} setGraph={setGraph} setPage={setPage}/>
-            <UploadCSV />
-        </div>
-    )
+        <dialog id="uploadCSV">
+            <div className="dialog-inner">
+                <div className="dialog-header">
+                    <h2 className="dialog-title">Nuevo análisis</h2>
+                    <button
+                        className="dialog-close-btn"
+                        onClick={() => (document.getElementById('uploadCSV') as HTMLDialogElement)?.close()}
+                    >×</button>
+                </div>
+
+                <div className="dialog-field">
+                    <label htmlFor="name-analysis">Nombre del análisis</label>
+                    <input
+                        id="name-analysis"
+                        type="text"
+                        placeholder="Ej. Encuesta satisfacción Q1 2025"
+                        value={nameAnalysis}
+                        onChange={e => setNameAnalysis(e.target.value)}
+                    />
+                </div>
+
+                <div className="dialog-field">
+                    <label>Archivo CSV</label>
+                    <div className="file-input-wrapper">
+                        <input type="file" accept=".csv" onChange={handleFile} />
+                        <span className="file-input-label">
+                            {fileName
+                                ? <><span>📄</span> {fileName}</>
+                                : <><span>Seleccionar archivo</span> .csv</>
+                            }
+                        </span>
+                    </div>
+                </div>
+
+                {columns.length > 0 && (
+                    <div className="dialog-field">
+                        <label htmlFor="columns-select">Columna a analizar</label>
+                        <select
+                            id="columns-select"
+                            value={columnsSelected}
+                            onChange={e => setColumnsSelected(e.target.value)}
+                        >
+                            {columns.map((col, i) => (
+                                <option key={i} value={col}>{col}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
+                <div className="checkbox-row">
+                    <input
+                        id="column-index-checkbox"
+                        type="checkbox"
+                        checked={isColumnIndex}
+                        onChange={() => setIsColumnIndex(!isColumnIndex)}
+                    />
+                    <label htmlFor="column-index-checkbox">Usar esta columna como índice</label>
+                </div>
+
+                <div className="dialog-footer">
+                    <button
+                        className="btn-ghost"
+                        onClick={() => (document.getElementById('uploadCSV') as HTMLDialogElement)?.close()}
+                    >Cancelar</button>
+                    <button
+                        className="btn-primary"
+                        onClick={handleSubmit}
+                        disabled={loading || !csvFile || !nameAnalysis}
+                    >
+                        {loading ? 'Procesando…' : 'Crear análisis'}
+                    </button>
+                </div>
+            </div>
+        </dialog>
+    );
+};
+
+/* ─── List Graphs ────────────────────────────────────────────────────────────── */
+
+interface ListGraphsProps {
+    setPage: (v: number) => void;
+    setGraph: (v: number | string) => void;
 }
+
+export const ListGraphs = ({ setPage, setGraph }: ListGraphsProps) => {
+    const { authFetch } = useAuth();
+    const [graphs, setGraphs] = useState<Graph[]>([]);
+
+    useEffect(() => {
+        const getGraphs = async () => {
+            try {
+                const response = await authFetch(ROUTES.get_graphs);
+                const data = await response.json();
+                setGraphs(data);
+            } catch (e) {
+                console.error('Error loading graphs', e);
+            }
+        };
+        getGraphs();
+    }, []);
+
+    const handleOpen = (id: string | number) => {
+        setGraph(id);
+        setPage(2);
+    };
+
+    return (
+        <div className="list-graphs-page">
+            <div className="list-graphs-page-header">
+                <div>
+                    <h2 className="list-graphs-page-title">Mis análisis</h2>
+                    <p className="list-graphs-page-subtitle">
+                        Selecciona un análisis existente o crea uno nuevo
+                    </p>
+                </div>
+                <button
+                    className="btn-primary"
+                    onClick={() => (document.getElementById('uploadCSV') as HTMLDialogElement)?.showModal()}
+                >
+                    + Nuevo análisis
+                </button>
+            </div>
+
+            <div className="graph-grid">
+                {graphs.length === 0 ? (
+                    <div className="graph-grid-empty">
+                        <div className="graph-grid-empty-icon">📂</div>
+                        <p>No tienes análisis aún. ¡Crea el primero!</p>
+                    </div>
+                ) : (
+                    graphs
+                        .sort((a, b) => b.date - a.date)
+                        .map(graph => (
+                            <div
+                                key={graph.id}
+                                className="graph-card"
+                                onClick={() => handleOpen(graph.id)}
+                            >
+                                <div className="graph-card-icon">📄</div>
+                                <div className="graph-card-body">
+                                    <div className="graph-card-name">{graph.name}</div>
+                                </div>
+                                <div className="graph-card-footer">
+                                    <button className="btn-primary graph-card-btn">
+                                        Abrir →
+                                    </button>
+                                </div>
+                            </div>
+                        ))
+                )}
+            </div>
+
+            <UploadCSV setPage={setPage} setGraph={setGraph} />
+        </div>
+    );
+};

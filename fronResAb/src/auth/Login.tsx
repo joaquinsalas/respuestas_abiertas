@@ -1,5 +1,6 @@
 import { useState, FormEvent } from 'react';
 import { useAuth } from './AuthContext';
+import './Login.css';
 
 export default function Login() {
     const { login } = useAuth();
@@ -22,29 +23,50 @@ export default function Login() {
     };
 
     return (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '300px' }}>
-                <h2 style={{ textAlign: 'center', margin: 0 }}>Iniciar sesión</h2>
-                <input
-                    type="text"
-                    placeholder="Usuario"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    required
-                    autoFocus
-                />
-                <input
-                    type="password"
-                    placeholder="Contraseña"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    required
-                />
-                {error && <p style={{ color: 'red', margin: 0, fontSize: '14px' }}>{error}</p>}
-                <button type="submit" disabled={loading}>
-                    {loading ? 'Ingresando...' : 'Ingresar'}
-                </button>
-            </form>
+        <div className="login-page">
+            <div className="login-card">
+                <div className="login-header">
+                    <h1 className="login-title">Respuestas Abiertas</h1>
+                    <p className="login-subtitle">Ingresa tus credenciales para continuar</p>
+                </div>
+                <form onSubmit={handleSubmit} className="login-form">
+                    <div className="login-field">
+                        <label htmlFor="login-name">Usuario</label>
+                        <input
+                            id="login-name"
+                            type="text"
+                            placeholder="Nombre de usuario"
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                            required
+                            autoFocus
+                        />
+                    </div>
+                    <div className="login-field">
+                        <label htmlFor="login-password">Contraseña</label>
+                        <input
+                            id="login-password"
+                            type="password"
+                            placeholder="••••••••"
+                            value={password}
+                            onChange={e => setPassword(e.target.value)}
+                            required
+                        />
+                    </div>
+                    {error && (
+                        <div className="login-error">
+                            <span>⚠</span> {error}
+                        </div>
+                    )}
+                    <button
+                        type="submit"
+                        className="btn-primary login-submit"
+                        disabled={loading}
+                    >
+                        {loading ? 'Ingresando…' : 'Iniciar sesión'}
+                    </button>
+                </form>
+            </div>
         </div>
     );
 }

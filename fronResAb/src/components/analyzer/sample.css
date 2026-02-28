@@ -1,0 +1,201 @@
+/* ─── DisplaySample ──────────────────────────────────────────────────────────── */
+
+.sample {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--color-surface);
+}
+
+.sample-header {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.sample-header h1 {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.sample-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
+}
+
+.sample-type-toggle {
+  display: flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-surface-2);
+}
+
+.sample-type-toggle button {
+  border: none;
+  border-radius: 0;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-xs);
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+
+.sample-type-toggle button.active {
+  background: var(--color-primary);
+  color: #ffffff;
+}
+
+.sample-type-toggle button:hover:not(.active) {
+  background-color: var(--color-surface-3);
+}
+
+/* ─── Data Items ─────────────────────────────────────────────────────────────── */
+
+.sample-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sample-item {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  cursor: pointer;
+  line-height: var(--line-height-relaxed);
+  transition: border-color var(--transition-fast), background-color var(--transition-fast),
+              box-shadow var(--transition-fast);
+  background-color: var(--color-surface);
+}
+
+.sample-item:hover:not(.sample-item--readonly) {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-muted);
+  box-shadow: var(--shadow-sm);
+}
+
+.sample-item--readonly {
+  cursor: default;
+  background-color: var(--color-surface-2);
+  border-color: var(--color-border-subtle);
+}
+
+/* ─── Sample Footer ──────────────────────────────────────────────────────────── */
+
+.sample-footer {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.sample-count {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* ─── Pagination ─────────────────────────────────────────────────────────────── */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pagination button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: var(--font-size-xs);
+}
+
+.pagination-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.pagination-info input {
+  width: 40px;
+  padding: var(--space-1) var(--space-2);
+  text-align: center;
+  font-size: var(--font-size-xs);
+}
+
+/* ─── Floating Sample Panel ──────────────────────────────────────────────────── */
+
+.sample-floating-wrapper {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(2px);
+}
+
+.sample-floating {
+  width: 420px;
+  max-height: 75%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+}
+
+.sample-floating-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.sample-floating-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.sample-floating-close {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-base);
+  line-height: 1;
+}
+
+.sample-floating-close:hover {
+  background-color: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+.sample-floating .sample-list {
+  max-height: 400px;
+}
