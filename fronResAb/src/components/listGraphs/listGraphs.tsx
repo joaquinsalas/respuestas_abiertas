@@ -1,5 +1,6 @@
 import {React, useEffect, useState} from 'react'
 import {ROUTES} from '../../routes.ts'
+import { useAuth } from '../../auth/AuthContext.tsx'
 
 interface optionGraphsProps{
     graphs : Array<{name : string, id : string | number, date : any}>
@@ -8,7 +9,7 @@ interface optionGraphsProps{
 }
 
 const OptionGraphs : React.FC = ({graphs, setGraph, setPage} : optionGraphsProps)=> {
-    
+
     const handlerClick = (e)=> {
         setGraph(e.target.value);
         setPage(2);
@@ -37,48 +38,43 @@ const OptionsColumnIndex : React.FC = ({columns} : {columns: Array<string>})=> {
 }
 
 const UploadCSV : React.FC = ()=> {
+    const { authFetch } = useAuth();
+    const [columns, setColumns] = useState([]);
+    const [isColumnIndex, setIsColumnIndex] = useState(false);
+    const [csvFile, setCsvFile] = useState(null);
+    const [columnsSelected, setColumnsSelected] = useState("");
+    const reader = new FileReader();
+    const [nameAnalysis, setNameAnalysis] = useState("");
 
-            const [columns, setColumns] = useState([]);
-            const [isColumnIndex, setIsColumnIndex] = useState(false);
-            const [csvFile, setCsvFile] = useState(null);
-            const [columnsSelected, setColumnsSelected] = useState("");
-            const reader = new FileReader();
-            const [nameAnalysis, setNameAnalysis] = useState("");
-        
-            const handlerFile = (e)=> {
-                const file = e.target.files[0];
-                reader.onload = (event)=> {
-                    const csvData = event.target.result;
-                    setCsvFile(file);
-                    const headers = csvData.split('\n')[0].split(',');
-                    setColumns(headers);
-                    setColumnsSelected(headers[0]);
-                }
-                reader.readAsText(file);
-            }
-        
-        const handlerSubmit = (e)=> {
-            const sendRequest = async () => {
+    const handlerFile = (e)=> {
+        const file = e.target.files[0];
+        reader.onload = (event)=> {
+            const csvData = event.target.result;
+            setCsvFile(file);
+            const headers = csvData.split('\n')[0].split(',');
+            setColumns(headers);
+            setColumnsSelected(headers[0]);
+        }
+        reader.readAsText(file);
+    }
+
+    const handlerSubmit = (e)=> {
+        const sendRequest = async () => {
             const formData = new FormData();
-            if(csvFile) formData.append("file", csvFile);           // el archivo CSV
-            formData.append("user_id", "1");         // requerido por Django
+            if(csvFile) formData.append("file", csvFile);
             formData.append("text_column", columnsSelected);
             formData.append("name", nameAnalysis);
             if(isColumnIndex) formData.append("id_column", isColumnIndex.toString());
-                
-            const response = await fetch(ROUTES.upload_csv, {
-              method: "POST",
-              body: formData,
+
+            await authFetch(ROUTES.upload_csv, {
+                method: "POST",
+                body: formData,
             });
-        
-            const data = await response.json();
-          };
-      
-          sendRequest();
         };
+        sendRequest();
+    };
 
     return(
-
         <dialog id='uploadCSV'>
             <div>
                 <label htmlFor="csv-upload">Subir CSV</label>
@@ -105,11 +101,13 @@ const UploadCSV : React.FC = ()=> {
     )
 }
 
-export const ListGraphs : React.FC= ({user_id= 1, setPage, setGraph} : any)=> {
+export const ListGraphs : React.FC = ({setPage, setGraph} : any)=> {
+    const { authFetch } = useAuth();
     const [graphs, setGraphs] = useState([]);
+
     useEffect(()=> {
         const getGraphs = async ()=> {
-            const response = await fetch(`${ROUTES.get_graphs}?user_id=${user_id}`);
+            const response = await authFetch(ROUTES.get_graphs);
             const data = await response.json();
             setGraphs(data);
         }
@@ -117,7 +115,6 @@ export const ListGraphs : React.FC= ({user_id= 1, setPage, setGraph} : any)=> {
     },[]);
 
     return (
-
         <div>
             <button onClick={()=> document.getElementById('uploadCSV')?.showModal()}>Nuevo Análisis</button>
             <OptionGraphs graphs={graphs} setGraph={setGraph} setPage={setPage}/>

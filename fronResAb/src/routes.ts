@@ -1,5 +1,6 @@
 const BASE = "http://localhost:8000"
 export const ROUTES = {
+    login: `${BASE}/login`,
     sample : `${BASE}/sample`,
     opc_cut : `${BASE}/opc_cut`,
     get_similarity: `${BASE}/get_similarity`,

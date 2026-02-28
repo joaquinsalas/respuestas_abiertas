@@ -20,6 +20,7 @@ from back import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('login', views.login_view),
     path('new_analysis', views.new_analysis_request),
     path('get_similarity', views.search_similar),
     path('opc_cut', views.opc_cut),

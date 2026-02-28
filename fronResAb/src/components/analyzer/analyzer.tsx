@@ -1,16 +1,13 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import './analyzer.css'
 import { ROUTES } from '../../routes.ts'
-//import React, { useCallback, useRef } from 'react';
+import { useAuth } from '../../auth/AuthContext.tsx'
 import {
-    applyNodeChanges, applyEdgeChanges,
     ReactFlow,
     useNodesState,
     useEdgesState,
     addEdge,
     Background,
-    useReactFlow,
-    ReactFlowProvider,
     BaseEdge,
     getBezierPath,
     type EdgeProps,
@@ -21,13 +18,6 @@ import {
 import '@xyflow/react/dist/style.css';
 
 
-/*const sampleData: Data[] = [
-    { id: '1', data: 'Ejemplo 1' },
-    { id: '2', data: 'Ejemplo 2' },
-    { id: '3', data: 'Ejemplo 3' },
-    { id: '4', data: 'Ejemplo 4' },
-    { id: '5', data: 'Ejemplo 5' },
-];]*/
 interface Data {
     data: string,
     id: string
@@ -92,10 +82,8 @@ function ButtonNavigate({ page, pageSize, totalItems, setPage }: ButtonNavigateP
                         const newPage = parseInt(e.target.value);
                         if (!isNaN(newPage) && newPage >= 1 && newPage <= totalPages) {
                             setPage(newPage);
-
                         }
                     }, 500)
-
                 }} /> / {totalPages}
             </p>
         </div>
@@ -104,47 +92,33 @@ function ButtonNavigate({ page, pageSize, totalItems, setPage }: ButtonNavigateP
 
 const ButtonNewSampleRandom: any = ({ setQuery, query }: { setQuery: any, query: boolean }) => {
     return (
-        <button onClick={(e) => {
-            setQuery(!query);
-
-        }}>
-
+        <button onClick={() => { setQuery(!query); }}>
             Otros datos
         </button>
     )
 }
 
-function DisplaySample({ setTarget, setComponent, initialTypeSample = 0, graph_id, categoryProp= ""}: any) {
+function DisplaySample({ setTarget, setComponent, initialTypeSample = 0, graph_id, categoryProp = "" }: any) {
+    const { authFetch } = useAuth();
     const [sampleData, setSampleData] = useState<Data[]>([]);
-    const [random, setRandom] = useState<number>(1); // 1 for random, 0 for paginated
-    const [typeSample, setTypeSample] = useState<number>(initialTypeSample); // 0 - all data, 1 - category, 2 - current category
-    const [sampleSize, setSampleSize] = useState<number>(10); // For random sampling
-    const [category, setCategory] = useState<string>(categoryProp); // For category-based sampling
-    const [page, setPage] = useState<number>(1); // For pagination
-    const [pageSize, setPageSize] = useState<number>(10); // For pagination
-    const [totalItems, setTotalItems] = useState<number>(0); // Total items for pagination
+    const [random, setRandom] = useState<number>(1);
+    const [typeSample, setTypeSample] = useState<number>(initialTypeSample);
+    const [sampleSize, setSampleSize] = useState<number>(10);
+    const [category, setCategory] = useState<string>(categoryProp);
+    const [page, setPage] = useState<number>(1);
+    const [pageSize] = useState<number>(10);
+    const [totalItems, setTotalItems] = useState<number>(0);
     const [query, setQuery] = useState(false);
-    // Dummy user_id and graph_id for now, these should come from context or props
-    const [user_id] = useState("1");
 
     useEffect(() => {
         const fetchData = async () => {
-            const url = `${ROUTES.sample}?user_id=${user_id}&graph_id=${graph_id}&sample=${typeSample}&random=${random}&ss=${sampleSize}&page=${page}&page_size=${pageSize}&category=${category}`;
-
+            const url = `${ROUTES.sample}?graph_id=${graph_id}&sample=${typeSample}&random=${random}&ss=${sampleSize}&page=${page}&page_size=${pageSize}&category=${category}`;
             try {
-                let response = await fetch(url);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                let dataJson = await response.json();
+                const response = await authFetch(url);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const dataJson = await response.json();
                 setSampleData(dataJson.data);
-                // Assuming the API returns total items for pagination, if not, we might need another endpoint or calculate it
-                // For now, let's assume the API returns a 'total' field in the response for paginated data
-                if (dataJson.total_items) { // Assuming the backend sends total_items
-                    setTotalItems(dataJson.total_items);
-                } else {
-                    setTotalItems(dataJson.data.length); // Fallback if total_items is not provided
-                }
+                setTotalItems(dataJson.total_items ?? dataJson.data.length);
             } catch (error) {
                 console.error("Error fetching sample data:", error);
                 setSampleData([]);
@@ -152,24 +126,23 @@ function DisplaySample({ setTarget, setComponent, initialTypeSample = 0, graph_i
             }
         };
         fetchData();
-    }, [random, typeSample, sampleSize, category, page, pageSize, user_id, graph_id, query]); // Dependencies for useEffect
-    let readOnly = false;
-    if (typeSample === 2 || typeSample === 1) {
-        readOnly = true;
-    }
+    }, [random, typeSample, sampleSize, category, page, pageSize, graph_id, query]);
+
+    const readOnly = typeSample === 2 || typeSample === 1;
+
     return (
         <div className='Sample'>
             {typeSample !== 2 && <h1>Selecciona un dato</h1>}
             <ButtonTypeSample random={random} setRandom={setRandom} />
             <DisplayData data={sampleData} setTarget={setTarget} setComponent={setComponent} readOnly={readOnly} />
-            {random === 0 && ( // Only show navigation buttons if in paginated mode
+            {random === 0 && (
                 <ButtonNavigate page={page} pageSize={sampleSize} totalItems={totalItems} setPage={setPage} />
             )}
             {random === 1 && (<ButtonNewSampleRandom setQuery={setQuery} query={query} />)}
             {typeSample === 2 && (
                 <div style={{marginTop: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px'}}>
                     <div style={{display: 'flex', gap: '10px'}}>
-                        <button onClick={e => setComponent(1)}>volver</button>
+                        <button onClick={() => setComponent(1)}>volver</button>
                     </div>
                     <p className='total-count'>cantidad de respuestas: {totalItems}</p>
                 </div>
@@ -178,7 +151,8 @@ function DisplaySample({ setTarget, setComponent, initialTypeSample = 0, graph_i
     )
 }
 
-function ReviewManager({ user_id, graph_id, target, setComponent }: any) {
+function ReviewManager({ graph_id, target, setComponent }: any) {
+    const { authFetch } = useAuth();
     const [loading, setLoading] = useState(false);
     const [similarity, setSimilarity] = useState(0.8);
     const [showSample, setShowSample] = useState(false);
@@ -186,15 +160,15 @@ function ReviewManager({ user_id, graph_id, target, setComponent }: any) {
 
     useEffect(() => {
         const preAnalysis = async () => {
-            const url = `${ROUTES.opc_cut}?user_id=${user_id}&graph_id=${graph_id}&target_id=${target.id}&n_opc=3&min_similarity=0.6`;
+            const url = `${ROUTES.opc_cut}?graph_id=${graph_id}&target_id=${target.id}&n_opc=3&min_similarity=0.6`;
             try {
-                await fetch(url);
+                await authFetch(url);
             } catch (error) {
                 console.error("Error in pre-analysis:", error);
             }
         };
         preAnalysis();
-    }, [user_id, graph_id, target.id]);
+    }, [graph_id, target.id]);
 
     const handleSimilarityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newSim = parseFloat(e.target.value);
@@ -202,17 +176,13 @@ function ReviewManager({ user_id, graph_id, target, setComponent }: any) {
         setLoading(true);
         setShowSample(false);
 
-        if (timerRef.current) {
-            clearTimeout(timerRef.current);
-        }
+        if (timerRef.current) clearTimeout(timerRef.current);
 
         timerRef.current = setTimeout(async () => {
-            const simUrl = `${ROUTES.get_similarity}?user_id=${user_id}&graph_id=${graph_id}&target_id=${target.id}&min_similarity=${newSim}&preanalized=1`;
+            const simUrl = `${ROUTES.get_similarity}?graph_id=${graph_id}&target_id=${target.id}&min_similarity=${newSim}&preanalized=1`;
             try {
-                const response = await fetch(simUrl);
-                if (response.ok) {
-                    setShowSample(true);
-                }
+                const response = await authFetch(simUrl);
+                if (response.ok) setShowSample(true);
             } catch (error) {
                 console.error("Error getting similarity:", error);
             } finally {
@@ -236,19 +206,15 @@ function ReviewManager({ user_id, graph_id, target, setComponent }: any) {
                         className="vertical-slider"
                     />
                 </div>
-                <p>
-                    {target.data}
-                </p>
+                <p>{target.data}</p>
                 <div className="display-area">
                     {loading ? (
-                        <div className="loader-container">
-                            <div className="loader"></div>
-                        </div>
+                        <div className="loader-container"><div className="loader"></div></div>
                     ) : (
                         showSample ? (
-                            <DisplaySample 
-                                graph_id={graph_id} 
-                                initialTypeSample={2} 
+                            <DisplaySample
+                                graph_id={graph_id}
+                                initialTypeSample={2}
                                 setComponent={setComponent}
                                 setTarget={() => {}}
                             />
@@ -263,20 +229,20 @@ function ReviewManager({ user_id, graph_id, target, setComponent }: any) {
 }
 
 interface ConfirmCategoryProps {
-    user_id: string;
     graph_id: string;
     setComponent: (component: number) => void;
-        setExec: (exec: boolean) => void;
+    setExec: (exec: boolean) => void;
     exec: boolean;
 }
 
-export function ConfirmCategory({ user_id, graph_id, setComponent, setExec, exec }: ConfirmCategoryProps) {
+export function ConfirmCategory({ graph_id, setComponent, setExec, exec }: ConfirmCategoryProps) {
+    const { authFetch } = useAuth();
     const [categoryName, setCategoryName] = useState("");
 
     const handleConfirm = async () => {
-        const url = `${ROUTES.new_category}?user_id=${user_id}&graph_id=${graph_id}&name=${categoryName}`;
+        const url = `${ROUTES.new_category}?graph_id=${graph_id}&name=${categoryName}`;
         try {
-            const response = await fetch(url);
+            const response = await authFetch(url);
             if (response.ok) {
                 setExec(!exec);
                 setComponent(1);
@@ -335,73 +301,53 @@ const edgeTypes = {
 };
 
 
-const ModalRightClickNode = ({ id, top, left, right, bottom, deleteNode, editNode, ...props }: any) => {
-    alert("me cacharon en la jugada")
+const MenuRightClick = ({
+    id,
+    top,
+    left,
+    right,
+    bottom,
+    graph_id,
+    exec,
+    onPaneClick,
+    setExec,
+    setData,
+    category,
+    setShowData,
+    ...props
+}: any) => {
+    const { authFetch } = useAuth();
+
+    const handlerDelete = async () => {
+        const res = await authFetch(ROUTES.delete_node, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ node_id: id, graph_id }),
+        });
+        if (!res.ok) {
+            console.error("Failed to delete node in backend");
+        } else {
+            onPaneClick();
+            setExec(!exec);
+        }
+    };
+
+    const handlerViewData = () => {
+        onPaneClick();
+        setData(category);
+        setShowData(true);
+    };
+
     return (
-        <div
-            style={{ top, left, right, bottom }}
-            className="context-menu"
-            {...props}
-        >
-            <p style={{ margin: '0.5em 1em', fontSize: '10px', color: '#999' }}>Nodo: {id}</p>
-            <button onClick={() => editNode(id)}>Editar</button>
-            <button onClick={() => deleteNode(id)}>Borrar</button>
+        <div style={{ top, left, right, bottom }} className="context-menu" {...props}>
+            <button onClick={handlerDelete}>borrar</button>
+            <button onClick={handlerViewData}>ver</button>
         </div>
     );
 };
 
-const MenuRightClick = ({
-  id,
-  top,
-  left,
-  right,
-  bottom,
-  graph_id,
-  exec,
-  onPaneClick,
-  setExec,
-  setData,
-  category,
-  setShowData,
-  ...props
-} : any )=> {
-    
-    const handlerDelete = async ()=> {
-        let data = await fetch(ROUTES.delete_node, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ node_id: id, user_id : 1, graph_id: graph_id}),
-        });
-        if (!data.ok) {
-            console.error("Failed to delete node in backend");
-        }
-        else{
-            onPaneClick();
-            setExec(!exec);
-        }
-    }
-
-    const handlerViewData = ()=>{
-        onPaneClick();
-        setData(category);
-        setShowData(true);
-    }
- 
-
- 
-  return (
-     <div
-      style={{ top, left, right, bottom }}
-      className="context-menu"
-      {...props}
-    >
-      <button onClick={handlerDelete}>borrar</button>
-      <button onClick={handlerViewData}>ver</button>
-    </div>
-  );
-}
-
 function SectionGraph({ exec = false, graph_id }: any) {
+    const { authFetch } = useAuth();
 
     const relations = {
         1: { "type": "Se asocia con " },
@@ -409,7 +355,7 @@ function SectionGraph({ exec = false, graph_id }: any) {
         3: { "type": "Es causa de" },
         4: { "type": "Es propiedad de" },
         5: { "type": "Es un" }
-    }
+    };
 
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -420,31 +366,23 @@ function SectionGraph({ exec = false, graph_id }: any) {
     const [showData, setShowData] = useState(false);
     const [category, setCategory] = useState("");
     const ref = useRef<HTMLDivElement>(null);
-    const user_id = "1";
-    
+
     const onConnect = useCallback(
         async (params: Connection) => {
             if (!params.source || !params.target) return;
-
-            // Prepare API call
             const body = {
-                user_id: user_id,
                 graph_id: graph_id.toString(),
                 node_id_1: parseInt(params.source),
                 node_id_2: parseInt(params.target),
-                connection_type: parseInt(selectedRelationType)
+                connection_type: parseInt(selectedRelationType),
             };
-
             try {
-                const response = await fetch(ROUTES.add_edge, {
+                const response = await authFetch(ROUTES.add_edge, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body),
                 });
-
                 if (response.ok) {
-                    // Success: update local state
-                    // Overwrite if edge between source and target already exists
                     setEdges((eds) => {
                         const filteredEdges = eds.filter(
                             (e) => !(e.source === params.source && e.target === params.target)
@@ -464,15 +402,14 @@ function SectionGraph({ exec = false, graph_id }: any) {
                 console.error("Error adding edge:", error);
             }
         },
-        [graph_id, selectedRelationType, setEdges, user_id]
+        [graph_id, selectedRelationType, setEdges, authFetch]
     );
 
     useEffect(() => {
         const getGraph = async () => {
             try {
-                const response = await fetch(`${ROUTES.get_graph}?graph_id=${graph_id}`);
+                const response = await authFetch(`${ROUTES.get_graph}?graph_id=${graph_id}`);
                 if (!response.ok) throw new Error("error al obtener el grafo");
-
                 const data: { nodes: any[], edges: any[] } = await response.json();
 
                 const nuevosNodos: Node[] = data.nodes.map((node, index) => ({
@@ -490,53 +427,45 @@ function SectionGraph({ exec = false, graph_id }: any) {
 
                 setNodes(nuevosNodos);
                 setEdges(newEdges);
-
             } catch (error) {
                 console.error(error);
             }
         };
-
         getGraph();
     }, [graph_id, setEdges, setNodes, exec, nodeDeleted, edgeDeleted]);
 
-  const onNodeContextMenu = useCallback((event, nodo) => {
-    event.preventDefault();
-    const pane = ref.current.getBoundingClientRect();
-    console.log(nodo);
-    setMenu({
-        id: nodo.id,
-        top:    event.clientY - pane.top  < pane.height - 200 && event.clientY - pane.top,
-        left:   event.clientX - pane.left < pane.width  - 200 && event.clientX - pane.left,
-        right:  event.clientX - pane.left >= pane.width  - 200 && pane.width  - (event.clientX - pane.left),
-        bottom: event.clientY - pane.top  >= pane.height - 200 && pane.height - (event.clientY - pane.top),
-        category : nodo.data.label,
-    });
-}, [setMenu]);
+    const onNodeContextMenu = useCallback((event, nodo) => {
+        event.preventDefault();
+        const pane = ref.current!.getBoundingClientRect();
+        setMenu({
+            id: nodo.id,
+            top:    event.clientY - pane.top  < pane.height - 200 && event.clientY - pane.top,
+            left:   event.clientX - pane.left < pane.width  - 200 && event.clientX - pane.left,
+            right:  event.clientX - pane.left >= pane.width  - 200 && pane.width  - (event.clientX - pane.left),
+            bottom: event.clientY - pane.top  >= pane.height - 200 && pane.height - (event.clientY - pane.top),
+            category: nodo.data.label,
+        });
+    }, [setMenu]);
 
-      const onPaneClick = useCallback(() => {setMenu(null); setShowData(false);}, [setMenu]);
+    const onPaneClick = useCallback(() => { setMenu(null); setShowData(false); }, [setMenu]);
 
-
-    const onEdgeClick = useCallback((event, edge)=>{
-        const deleteEdge= async() =>{
-            let request = await fetch(ROUTES.delete_edge, {
-                method : 'POST',
-                  headers: {
-                        "Content-Type": "application/json",  // <- indica que envías JSON
-                    },
-                body : JSON.stringify({
-                    user_id : user_id,
-                    graph_id : graph_id,
-                    from_node_id : edge.target,
-                    to_node_id : edge.source
-
-                })
+    const onEdgeClick = useCallback((event, edge) => {
+        const deleteEdge = async () => {
+            const res = await authFetch(ROUTES.delete_edge, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    graph_id,
+                    from_node_id: edge.target,
+                    to_node_id: edge.source,
+                }),
             });
-            if(!request.ok) alert("error al eliminar la conexion, intente mas tarde");
-            setEdgeDeleted(prev  => !prev);
-            console.log(edgeDeleted)
-        }
+            if (!res.ok) alert("error al eliminar la conexion, intente mas tarde");
+            setEdgeDeleted(prev => !prev);
+        };
         deleteEdge();
-    },[])
+    }, [graph_id, authFetch]);
+
     return (
         <div className='graph' ref={ref} style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
             <div className="relation-selector" style={{ padding: '10px', background: '#f0f0f0', display: 'flex', gap: '10px' }}>
@@ -567,58 +496,55 @@ function SectionGraph({ exec = false, graph_id }: any) {
                     onPaneClick={onPaneClick}
                     onEdgeClick={onEdgeClick}
                 >
-                    {menu && <MenuRightClick {...menu} onPaneClick={onPaneClick} graph_id={graph_id} setExec={setNodeDeleted} exec={nodeDeleted} setData={setCategory} setShowData={setShowData}/>}
+                    {menu && <MenuRightClick {...menu} onPaneClick={onPaneClick} graph_id={graph_id} setExec={setNodeDeleted} exec={nodeDeleted} setData={setCategory} setShowData={setShowData} />}
                     <Background />
                 </ReactFlow>
-                {showData && <DisplaySample initialTypeSample={1} graph_id={graph_id} categoryProp={category}/>}
+                {showData && <DisplaySample initialTypeSample={1} graph_id={graph_id} categoryProp={category} setTarget={() => {}} setComponent={() => {}} />}
             </div>
         </div>
     )
 }
 
 
-function SectionDesk({exec, setExec, user_id, graph_id} : any) {
-    const [currentComponent, setCurrentComponent] = useState(1); // 1 - show data to select / 2 - Show review manager / 4 - Show confirm
-    const [optionsCut, setOptionsCut] = useState<Array<{ id: number | string, data: string, sim: number }>>([])
+function SectionDesk({ exec, setExec, graph_id }: any) {
+    const [currentComponent, setCurrentComponent] = useState(1);
     const [target, setTarget] = useState<{ data: string, id: number | string }>();
-    
+
     return (
         <section className='desk'>
             {currentComponent === 1 && <DisplaySample setComponent={setCurrentComponent} setTarget={setTarget} graph_id={graph_id} />}
-            {currentComponent === 2 && target && <ReviewManager user_id={user_id} graph_id={graph_id} target={target} setComponent={setCurrentComponent} />}
-            {currentComponent === 4 && <ConfirmCategory setComponent={setCurrentComponent} user_id={user_id} graph_id={graph_id} setExec={setExec} exec={exec}/>}
+            {currentComponent === 2 && target && <ReviewManager graph_id={graph_id} target={target} setComponent={setCurrentComponent} />}
+            {currentComponent === 4 && <ConfirmCategory graph_id={graph_id} setComponent={setCurrentComponent} setExec={setExec} exec={exec} />}
         </section>
     )
 }
 
-export function Analyzer({graph, setPage} : any) {
-
+export function Analyzer({ graph, setPage }: any) {
+    const { authFetch } = useAuth();
     const [exec, setExec] = useState(false);
 
-    const handlerClick = (e) => {
-        let getData = async ()=> {
-            let data = await fetch(`${ROUTES.dowload_csv}?user_id=1&graph_id=${graph}`);
-            let dataBlob = await data.blob();
-            let url = URL.createObjectURL(dataBlob)
-            let a = document.createElement('a');
+    const handlerClick = () => {
+        const getData = async () => {
+            const res = await authFetch(`${ROUTES.dowload_csv}?graph_id=${graph}`);
+            const dataBlob = await res.blob();
+            const url = URL.createObjectURL(dataBlob);
+            const a = document.createElement('a');
             a.href = url;
             a.download = "resultado.csv";
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-        }
+        };
         getData();
-    }
+    };
 
     return (
         <div className='analyzer'>
-            <button onClick={()=> setPage(1)}>regresar</button>
+            <button onClick={() => setPage(1)}>regresar</button>
             <button onClick={handlerClick}>Exportar a CSV</button>
-                <SectionGraph exec={exec} user_id={graph.user_id} graph_id={graph} />
-            <SectionDesk setExec={setExec} exec={exec} user_id={1} graph_id={graph} />
+            <SectionGraph exec={exec} graph_id={graph} />
+            <SectionDesk setExec={setExec} exec={exec} graph_id={graph} />
         </div>
-
     )
 }
-

@@ -1,9 +1,20 @@
 from django.db import models
+from django.contrib.auth.hashers import make_password, check_password as _check_password
 
 # Create your models here.
 class users(models.Model):
     name = models.CharField(max_length=255)
     password = models.CharField(max_length=255)
+
+    @property
+    def is_authenticated(self):
+        return True
+
+    def set_password(self, raw_password):
+        self.password = make_password(raw_password)
+
+    def check_password(self, raw_password):
+        return _check_password(raw_password, self.password)
 
 class graphs(models.Model):
     file_data_path = models.CharField(max_length=255)
