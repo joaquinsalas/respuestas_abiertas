@@ -19,7 +19,7 @@ fs = s3fs.S3FileSystem(
     key=os.getenv("AWS_ACCESS_KEY_ID"),
     secret=os.getenv("AWS_SECRET_ACCESS_KEY"),
     client_kwargs={
-        "endpoint_url": "http://localhost:9000"
+        "endpoint_url": os.getenv("MINIO_ENDPOINT_URL", "http://localhost:9000")
     })
 
 def save_or_update_tree_s3(path: str, data: pd.DataFrame):

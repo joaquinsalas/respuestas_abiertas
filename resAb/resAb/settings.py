@@ -148,7 +148,7 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
 }
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True          # Redirige HTTP → HTTPS
+    SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True") == "True"  # Redirige HTTP → HTTPS
     SECURE_HSTS_SECONDS = 31536000      # HSTS por 1 año
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
@@ -157,7 +157,7 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True        # Cookie de sesión solo por HTTPS
     CSRF_COOKIE_SECURE = True           # Cookie CSRF solo por HTTPS
 
-STATIC_URL = 'assets/'
+STATIC_URL = '/assets/'
 
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'frontResAb/dist/assets')
@@ -166,8 +166,10 @@ STATICFILES_DIRS = [
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 STORAGES = {
-    # ...
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
     },
 }
