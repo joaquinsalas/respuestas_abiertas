@@ -16,6 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from django.views.generic import TemplateView
 from back import views
 
 urlpatterns = [
@@ -33,5 +34,6 @@ urlpatterns = [
     path('get_user_graphs', views.get_user_graphs),
     path('delete_node', views.delete_node),
     path('delete_edge', views.delete_edge),
-    path('delete_graph', views.delete_graph)
+    path('delete_graph', views.delete_graph),
+    path('', TemplateView.as_view(template_name='index.html'))
 ]

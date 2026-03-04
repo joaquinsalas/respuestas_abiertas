@@ -118,7 +118,7 @@ const UploadCSV = ({ setPage, setGraph }: UploadCSVProps) => {
                     </div>
                 )}
 
-                <div className="checkbox-row">
+               {/* <div className="checkbox-row">
                     <input
                         id="column-index-checkbox"
                         type="checkbox"
@@ -127,7 +127,7 @@ const UploadCSV = ({ setPage, setGraph }: UploadCSVProps) => {
                     />
                     <label htmlFor="column-index-checkbox">Usar esta columna como índice</label>
                 </div>
-
+*/}
                 <div className="dialog-footer">
                     <button
                         className="btn-ghost"

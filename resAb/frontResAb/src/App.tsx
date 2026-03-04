@@ -7,7 +7,7 @@ import './App.css'
 function AppContent() {
     const { isAuthenticated, logout, user } = useAuth();
     const [page, setPage] = useState(1);
-    const [graph, setGraph] = useState(0);
+    const [graph, setGraph] = useState<number | string>(0);
     const [theme, setTheme] = useState<'light' | 'dark'>(
         () => (localStorage.getItem('ra_theme') as 'light' | 'dark') || 'light'
     );

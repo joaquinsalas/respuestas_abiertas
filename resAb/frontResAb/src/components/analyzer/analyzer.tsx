@@ -72,7 +72,7 @@ function Pagination({
     setPage: any;
 }) {
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-    const [inputVal, setInputVal] = useState(page);
+    const [inputVal, setInputVal] = useState<number | string>(page);
     return (
         <div className="pagination">
             <button onClick={() => setPage((p: number) => {
@@ -92,7 +92,7 @@ function Pagination({
                 />
                 <span>/ {totalPages}</span>
             </div>
-            <button onClick={(e) => {setPage((p: number) => {
+            <button onClick={() => {setPage((p: number) => {
                 setInputVal(Math.min(totalPages, p + 1));
 
                 return Math.min(totalPages, p + 1)});
@@ -211,7 +211,7 @@ function ReviewManager({ graph_id, target, setComponent }: any) {
     const { authFetch } = useAuth();
     const [loading, setLoading] = useState(false);
     const [similarity, setSimilarity] = useState(0.8);
-    const [visibleSimilarity, setVisibleSimilarity] = useState(similarity);
+    const [visibleSimilarity, setVisibleSimilarity] = useState<number | string>(similarity);
     const [showSample, setShowSample] = useState(false);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -259,7 +259,7 @@ function ReviewManager({ graph_id, target, setComponent }: any) {
                         step="0.001"
                         value={similarity}
                         onChange={e => {handleSimilarityChange(parseFloat(e.target.value));
-                            setVisibleSimilarity(parseFloat(e.target.value).toFixed(2));
+                            setVisibleSimilarity(parseFloat(e.target.value).toFixed(3));
                         }}
                         className="vertical-slider"
                     />
