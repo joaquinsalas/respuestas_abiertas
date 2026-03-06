@@ -145,8 +145,8 @@ def new_analysis_request(request):
     if id_column is None:
         data['ID'] = [str(i) for i in range(data.shape[0])]
     embedding = get_embeddings_main(data, text_column=text_column, ID_column=id_column)  # type: ignore
-    save_or_update_tree_s3(f"{BASE_PATH}/data.parquet", data=data)
-    save_or_update_tree_s3(f"{BASE_PATH}/embedding.parquet", data=embedding)
+    save_or_update_tree_s3(f"{BASE_PATH}/data.parquet", data=data) #almacena el csv original sin ninguna modificacion
+    save_or_update_tree_s3(f"{BASE_PATH}/embedding.parquet", data=embedding) #almacena un archivo paralelo que conteine el embedding y su ID
     graph.file_data_path = f"{BASE_PATH}/data.parquet"
     graph.file_embedding_path = f"{BASE_PATH}/embedding.parquet"
     graph.text_column = text_column
@@ -163,7 +163,7 @@ def new_analysis_request(request):
 
 @api_view(['GET'])
 def search_similar(request):
-    """Buscar embeddings similares."""
+    """Buscar embeddings similares y los almacena en curreReviewParquet."""
     try:
         graph_id = request.GET.get("graph_id")
         target_id = request.GET.get("target_id")
@@ -178,7 +178,7 @@ def search_similar(request):
     except graphs.DoesNotExist:
         return Response("Grafo no encontrado", status=400)
 
-    if is_preanalized == 1:
+    if is_preanalized == 1: # error aqui, si la peticion indica 1 hay posibilidad de que el archivo parquet temp no incluya toda la informacion
         tmp_df: pd.DataFrame = read_tree_s3(f"{user.pk}/{graph_id}/temp_emb.parquet")
         data = tmp_df[tmp_df['similarity'] >= min_sim]
         result = data[['similarity', graph.text_column, graph.id_column]]  # type: ignore
@@ -201,12 +201,7 @@ def search_similar(request):
         result = result[['similarity', graph.text_column, graph.id_column]]  # type: ignore
 
     save_or_update_tree_s3(f"{user.pk}/{graph_id}/currentReview.parquet", result)
-    return Response({
-        "count": len(result),
-        "results": result.to_dict('records'),
-        "keys": {'id': graph.id_column, 'data': graph.text_column, 'sim': 'similarity'},  # type: ignore
-    })
-
+    return HttpResponse(200)
 
 @api_view(['GET'])
 def delete_temp_embedding_endpoint(request):
@@ -258,7 +253,7 @@ def sample(request):
     try:
         graph_id = request.GET.get("graph_id")
         random_sample = int(request.GET.get("random", 1))
-        type_sample = int(request.GET.get("sample", 0))
+        type_sample = int(request.GET.get("sample", 0)) # 0 sobre todos los datos, 1 sobre una categoria, 2 sobre las respuestas en revision
         sample_size = int(request.GET.get("ss", 5))
         category = request.GET.get("category", None)
         page = int(request.GET.get("page", 1))
@@ -319,6 +314,38 @@ def sample(request):
     return Response({"data": result.to_dict("records"), "total_items": data.shape[0]})
 
 
+@api_view(['GET'])
+def calculate_sim_cos(request):
+    try:
+        target_id = request.GET.get('target_id')
+        graph_id = request.GET.get('graph_id')
+    except Exception as e:
+        return Response(f"Formato de los datos erroneo {e}", status=400)
+    min_cos = 0
+    if not (target_id):
+        return Response("Datos incompletos en la solicitud", status=400)
+
+    user = request.user # el decorador api_view hace cosas
+    try:
+        graph = graphs.objects.get(id_user=user, id=graph_id)
+    except graphs.DoesNotExist:
+        return Response("Grafo no encontrado", status=400)
+    PATH_EMB = f"{user.pk}/{graph_id}/embedding.parquet"
+    df_embedding: pd.DataFrame = read_tree_s3(PATH_EMB)
+    target_row = df_embedding[df_embedding[graph.id_column] == target_id].iloc[0]['embedding']
+
+    #voy a obtener la similitud coseno de todos los datos
+    df_embedding_min_cos = get_similar_embeddings(target_row, df_embedding, min_cos)  # type: ignore
+
+    df_data: pd.DataFrame = read_tree_s3(f"{user.pk}/{graph_id}/data.parquet")
+    df_embedding_min_cos = df_embedding_min_cos.merge(df_data, on=graph.id_column, how="left")
+
+    save_or_update_tree_s3(f"{user.pk}/{graph_id}/temp_emb.parquet", df_embedding_min_cos)
+
+    return HttpResponse(200)
+
+
+#este endpoint esta obsoleto
 @api_view(['GET'])
 def opc_cut(request):
     try:

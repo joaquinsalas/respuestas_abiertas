@@ -217,7 +217,7 @@ function ReviewManager({ graph_id, target, setComponent }: any) {
 
     useEffect(() => {
         const preAnalysis = async () => {
-            const url = `${ROUTES.opc_cut}?graph_id=${graph_id}&target_id=${target.id}&n_opc=3&min_similarity=0.6`;
+            const url = `${ROUTES.sim_cos}?graph_id=${graph_id}&target_id=${target.id}`;
             try { await authFetch(url); }
             catch (e) { console.error('Pre-analysis error:', e); }
         };

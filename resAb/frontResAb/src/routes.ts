@@ -2,7 +2,7 @@ const BASE = ""
 export const ROUTES = {
     login: `${BASE}/login`,
     sample : `${BASE}/sample`,
-    opc_cut : `${BASE}/opc_cut`,
+    sim_cos : `${BASE}/sim_cos`,
     get_similarity: `${BASE}/get_similarity`,
     new_category: `${BASE}/new_category`,
     delete_tmp: `${BASE}/delete_tmp`,

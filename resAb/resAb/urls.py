@@ -24,7 +24,7 @@ urlpatterns = [
     path('login', views.login_view),
     path('new_analysis', views.new_analysis_request),
     path('get_similarity', views.search_similar),
-    path('opc_cut', views.opc_cut),
+    path('sim_cos', views.calculate_sim_cos),
     path('new_category', views.confirm_new_category),
     path('sample', views.sample),
     path('delete_tmp', views.delete_temp_embedding_endpoint),
