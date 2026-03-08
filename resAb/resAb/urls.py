@@ -35,5 +35,6 @@ urlpatterns = [
     path('delete_node', views.delete_node),
     path('delete_edge', views.delete_edge),
     path('delete_graph', views.delete_graph),
+    path('get_progress', views.get_progress),
     path('', TemplateView.as_view(template_name='index.html'))
 ]

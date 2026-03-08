@@ -585,6 +585,27 @@ def delete_node(request):
         return Response(f"Error inesperado: {e}", status=500)
 
 
+@api_view(['GET'])
+def get_progress(request):
+    """Porcentaje de registros asignados a al menos una categoría."""
+    graph_id = request.GET.get("graph_id")
+    if not graph_id:
+        return Response("graph_id es requerido", status=400)
+    user = request.user
+    try:
+        graphs.objects.get(id_user=user, id=graph_id)
+    except graphs.DoesNotExist:
+        return Response("Grafo no encontrado", status=400)
+
+    df = read_tree_s3(f"{user.pk}/{graph_id}/embedding.parquet")
+    total = len(df)
+    if total == 0:
+        return Response({"progress": 0.0})
+    assigned = (pd.to_numeric(df[COLUM_COUNT_OCURRENCE], errors='coerce').fillna(0) > 0).sum()
+    progress = round(float(assigned / total * 100), 2)
+    return Response({"progress": progress})
+
+
 @api_view(['POST', 'DELETE'])
 def delete_graph(request):
     """Eliminar un grafo, sus datos en S3 y sus registros en BD."""

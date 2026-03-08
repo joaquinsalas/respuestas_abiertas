@@ -463,7 +463,21 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted }: any) {
     const [edgeDeleted, setEdgeDeleted] = useState(false);
     const [showData, setShowData] = useState(false);
     const [category, setCategory] = useState('');
+    const [progress, setProgress] = useState<number | null>(null);
     const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const fetchProgress = async () => {
+            try {
+                const res = await authFetch(`${ROUTES.get_progress}?graph_id=${graph_id}`);
+                if (res.ok) {
+                    const json = await res.json();
+                    setProgress(json.progress);
+                }
+            } catch (e) { console.error('Progress error:', e); }
+        };
+        fetchProgress();
+    }, [graph_id, exec, nodeDeleted]);
 
     const onConnect = useCallback(async (params: Connection) => {
         if (!params.source || !params.target) return;
@@ -564,6 +578,14 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted }: any) {
                         {label}
                     </button>
                 ))}
+                {progress !== null && (
+                    <div className="progress-indicator">
+                        <div className="progress-bar-track">
+                            <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
+                        </div>
+                        <span className="progress-label">{progress}% categorizado</span>
+                    </div>
+                )}
             </div>
 
             {/* ReactFlow canvas */}
