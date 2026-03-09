@@ -238,6 +238,10 @@ def confirm_new_category(request):
         graph = graphs.objects.get(id_user=user, id=graph_id)
     except graphs.DoesNotExist:
         return Response("Grafo no encontrado", status=400)
+    
+    category = nodes.objects.filter(node_name=name_category, graph=graph).count()
+    if category != 0:
+        return Response("Categoria ya existente", status=400)
 
     new_node = nodes(node_name=name_category, graph=graph)  # type: ignore
     BASE_PATH_USER = f"{user.pk}/{graph_id}"
@@ -479,7 +483,19 @@ def get_full_graph(request):
 
         nodes_list = [{"id": n.id, "name": n.node_name} for n in all_nodes]
         edges_list = [
-            {"id": e.id, "source": e.from_node.id, "target": e.to_node.id, "relation_id": e.relation.id}
+            {
+                "id":          e.id,
+                "source":      e.from_node.id,
+                "target":      e.to_node.id,
+                "relation_id": e.relation.id,
+                "relation_style": {
+                    "label":        e.relation.type,
+                    "color":        e.relation.color,
+                    "is_dashed":    e.relation.is_dashed,
+                    "direction":    e.relation.direction,
+                    "stroke_width": e.relation.stroke_width,
+                },
+            }
             for e in edges_objs
         ]
 
@@ -583,6 +599,80 @@ def delete_node(request):
         return Response("Grafo o nodo no encontrado", status=400)
     except Exception as e:
         return Response(f"Error inesperado: {e}", status=500)
+
+
+@api_view(['POST'])
+def create_relationship(request):
+    """Crear un nuevo tipo de relación/arista personalizada."""
+    try:
+        graph_id     = request.data.get('graph_id')
+        label        = (request.data.get('type') or '').strip()
+        color        = request.data.get('color', '#6366f1')
+        is_dashed    = bool(request.data.get('is_dashed', False))
+        direction    = request.data.get('direction', 'forward')
+        stroke_width = int(request.data.get('stroke_width', 2))
+        is_global    = int(request.data.get('is_global', 0))
+    except Exception as e:
+        return Response(f"Error en los datos: {e}", status=400)
+
+    if not label:
+        return Response("El nombre de la relación es requerido", status=400)
+    if direction not in ('forward', 'backward', 'both'):
+        return Response("direction debe ser forward, backward o both", status=400)
+
+    user = request.user
+    graph_obj = None
+
+    if is_global == 0:
+        if not graph_id:
+            return Response("graph_id es requerido para relaciones no globales", status=400)
+        try:
+            graph_obj = graphs.objects.get(id=graph_id, id_user=user)
+        except graphs.DoesNotExist:
+            return Response("Grafo no encontrado o no pertenece al usuario", status=400)
+
+    rel = relationship.objects.create(
+        type=label,
+        color=color,
+        is_dashed=is_dashed,
+        direction=direction,
+        stroke_width=stroke_width,
+        is_global=is_global,
+        graph=graph_obj,
+        id_user=user,
+    )
+    return Response({"id": rel.id, "type": rel.type}, status=201)
+
+
+@api_view(['GET'])
+def get_relations(request):
+    """Obtener tipos de relación disponibles para un grafo (globales del user + específicas del grafo)."""
+    graph_id = request.GET.get('graph_id')
+    if not graph_id:
+        return Response("graph_id es requerido", status=400)
+    user = request.user
+    try:
+        graph_obj = graphs.objects.get(id=graph_id, id_user=user)
+    except graphs.DoesNotExist:
+        return Response("Grafo no encontrado", status=400)
+
+    from django.db.models import Q as DQ
+    rels = relationship.objects.filter(
+        DQ(is_global=1, id_user=user) | DQ(is_global=0, graph=graph_obj)
+    )
+    data = [
+        {
+            'id':           r.id,
+            'type':         r.type,
+            'color':        r.color,
+            'is_dashed':    r.is_dashed,
+            'direction':    r.direction,
+            'stroke_width': r.stroke_width,
+            'is_global':    r.is_global,
+        }
+        for r in rels
+    ]
+    return Response({'relations': data})
 
 
 @api_view(['GET'])

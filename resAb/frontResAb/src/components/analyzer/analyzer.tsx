@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { toPng, toJpeg } from 'html-to-image'
 import './analyzer.css'
 import './sample.css'
 import { ROUTES } from '../../routes.ts'
@@ -7,11 +8,11 @@ import {
     ReactFlow,
     useNodesState,
     useEdgesState,
+    useReactFlow,
     addEdge,
     Background,
-    BaseEdge,
-    getBezierPath,
-    type EdgeProps,
+    MarkerType,
+    getViewportForBounds,
     type Connection,
     type Edge,
     type Node,
@@ -251,11 +252,15 @@ function ReviewManager({ graph_id, target, setComponent }: any) {
         }, 1000);
     };
 
+    const handleNewCategory = ()=> {
+        if(showSample) setComponent(4);
+    }
+
     return (
         <div className="review-manager">
             <div className="review-manager-top">
-                <button className="btn-primary create-category-btn" onClick={() => setComponent(4)}>
-                    Crear categoría
+                <button className="btn-primary create-category-btn" onClick={handleNewCategory}>
+                    {loading ?    <div className="loader-container"><div className="loader" /></div>: 'Crear categoría'}
                 </button>
             </div>
             <div className="review-layout">
@@ -386,21 +391,6 @@ export function ConfirmCategory({ graph_id, setComponent, setExec, exec }: Confi
     );
 }
 
-/* ─── Custom Edges ───────────────────────────────────────────────────────────── */
-
-const makeEdge = (color: string) => (props: EdgeProps) => {
-    const [path] = getBezierPath(props);
-    return <BaseEdge path={path} {...props} style={{ stroke: color, strokeWidth: 2 }} />;
-};
-
-const edgeTypes = {
-    '1': makeEdge('#3b82f6'),
-    '2': makeEdge('#10b981'),
-    '3': makeEdge('#ef4444'),
-    '4': makeEdge('#f59e0b'),
-    '5': makeEdge('#8b5cf6'),
-};
-
 /* ─── Context Menu ───────────────────────────────────────────────────────────── */
 
 const MenuRightClick = ({
@@ -435,29 +425,228 @@ const MenuRightClick = ({
     );
 };
 
+/* ─── Relation Types ─────────────────────────────────────────────────────────── */
+
+interface RelationType {
+    id: number;
+    type: string;
+    color: string;
+    is_dashed: boolean;
+    direction: 'forward' | 'backward' | 'both';
+    stroke_width: number;
+    is_global: number;
+}
+
+function relationToEdgeProps(style: RelationType): Partial<Edge> {
+    const { color, direction, stroke_width, is_dashed } = style;
+    return {
+        style: {
+            stroke: color,
+            strokeWidth: stroke_width,
+            strokeDasharray: is_dashed ? '6,3' : undefined,
+        },
+        markerEnd: (direction === 'forward' || direction === 'both')
+            ? { type: MarkerType.ArrowClosed, color }
+            : undefined,
+        markerStart: (direction === 'backward' || direction === 'both')
+            ? { type: MarkerType.ArrowClosed, color }
+            : undefined,
+    };
+}
+
+/* ─── New Relation Modal ─────────────────────────────────────────────────────── */
+
+function NewRelationModal({ graph_id, onClose, onCreated }: {
+    graph_id: any;
+    onClose: () => void;
+    onCreated: (rel: RelationType) => void;
+}) {
+    const { authFetch } = useAuth();
+    const [label, setLabel]               = useState('');
+    const [color, setColor]               = useState('#6366f1');
+    const [isDashed, setIsDashed]         = useState(false);
+    const [direction, setDirection]       = useState<'forward' | 'backward' | 'both'>('forward');
+    const [strokeWidth, setStrokeWidth]   = useState(2);
+    const [isGlobal, setIsGlobal]         = useState(false);
+    const [saving, setSaving]             = useState(false);
+
+    const handleSave = async () => {
+        if (!label.trim()) return;
+        setSaving(true);
+        try {
+            const res = await authFetch(ROUTES.create_relationship, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    graph_id,
+                    type: label.trim(),
+                    color,
+                    is_dashed: isDashed,
+                    direction,
+                    stroke_width: strokeWidth,
+                    is_global: isGlobal ? 1 : 0,
+                }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                onCreated({
+                    id: data.id, type: label.trim(), color,
+                    is_dashed: isDashed, direction,
+                    stroke_width: strokeWidth, is_global: isGlobal ? 1 : 0,
+                });
+                onClose();
+            }
+        } finally { setSaving(false); }
+    };
+
+    const showEnd   = direction === 'forward'  || direction === 'both';
+    const showStart = direction === 'backward' || direction === 'both';
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-box" onClick={e => e.stopPropagation()}>
+                <h2 className="modal-title">Nueva relación</h2>
+
+                <div className="modal-field">
+                    <label>Nombre</label>
+                    <input
+                        type="text"
+                        value={label}
+                        onChange={e => setLabel(e.target.value)}
+                        placeholder="Ej. Depende de"
+                        autoFocus
+                    />
+                </div>
+
+                <div className="modal-row">
+                    <div className="modal-field">
+                        <label>Color</label>
+                        <input type="color" value={color} onChange={e => setColor(e.target.value)} />
+                    </div>
+                    <div className="modal-field">
+                        <label>Grosor ({strokeWidth}px)</label>
+                        <input
+                            type="range" min={1} max={6} value={strokeWidth}
+                            onChange={e => setStrokeWidth(Number(e.target.value))}
+                        />
+                    </div>
+                </div>
+
+                <div className="modal-field">
+                    <label>Trazo</label>
+                    <label className="modal-toggle">
+                        <input type="checkbox" checked={isDashed} onChange={e => setIsDashed(e.target.checked)} />
+                        Punteado
+                    </label>
+                </div>
+
+                <div className="modal-field">
+                    <label>Dirección</label>
+                    <div className="direction-options">
+                        {(['forward', 'backward', 'both'] as const).map(d => (
+                            <label key={d} className={`direction-option${direction === d ? ' direction-option--active' : ''}`}>
+                                <input type="radio" name="direction" value={d}
+                                       checked={direction === d} onChange={() => setDirection(d)} />
+                                {d === 'forward' ? 'A → B' : d === 'backward' ? 'A ← B' : 'A ↔ B'}
+                            </label>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Live preview */}
+                <div className="relation-preview">
+                    <svg width="100%" height="50" viewBox="0 0 240 50">
+                        <defs>
+                            {showEnd && (
+                                <marker id="prev-end" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                                    <path d="M0,0 L0,6 L8,3 z" fill={color} />
+                                </marker>
+                            )}
+                            {showStart && (
+                                <marker id="prev-start" markerWidth="8" markerHeight="8" refX="2" refY="3" orient="auto-start-reverse">
+                                    <path d="M0,0 L0,6 L8,3 z" fill={color} />
+                                </marker>
+                            )}
+                        </defs>
+                        <line
+                            x1="20" y1="25" x2="220" y2="25"
+                            stroke={color}
+                            strokeWidth={strokeWidth}
+                            strokeDasharray={isDashed ? '8,4' : undefined}
+                            markerEnd={showEnd ? 'url(#prev-end)' : undefined}
+                            markerStart={showStart ? 'url(#prev-start)' : undefined}
+                        />
+                        <text x="120" y="18" textAnchor="middle"
+                              fontSize="11" fill={color} opacity={0.8}>
+                            {label || 'Previsualización'}
+                        </text>
+                    </svg>
+                </div>
+
+                <label className="modal-toggle">
+                    <input type="checkbox" checked={isGlobal} onChange={e => setIsGlobal(e.target.checked)} />
+                    Disponible en todos mis grafos (global)
+                </label>
+
+                <div className="modal-actions">
+                    <button className="btn-ghost" onClick={onClose}>Cancelar</button>
+                    <button className="btn-primary" onClick={handleSave}
+                            disabled={!label.trim() || saving}>
+                        {saving ? 'Guardando…' : 'Guardar'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ─── Graph Capture ──────────────────────────────────────────────────────────── */
+
+type CaptureGraphFn = (format: 'png' | 'jpeg') => Promise<string | null>;
+
+function GraphCapture({ onCaptureReady }: { onCaptureReady: (fn: CaptureGraphFn) => void }) {
+    const { getNodesBounds, getNodes } = useReactFlow();
+
+    useEffect(() => {
+        const capture: CaptureGraphFn = async (format) => {
+            const nodes = getNodes();
+            if (!nodes.length) return null;
+            const imageWidth  = 1920;
+            const imageHeight = 1080;
+            const bounds   = getNodesBounds(nodes);
+            const viewport = getViewportForBounds(bounds, imageWidth, imageHeight, 0.1, 2, 0.1);
+            const el = document.querySelector<HTMLElement>('.react-flow__viewport');
+            if (!el) return null;
+            const bgColor = getComputedStyle(document.documentElement)
+                .getPropertyValue('--color-bg').trim() || '#ffffff';
+            const opts = {
+                backgroundColor: bgColor,
+                width: imageWidth,
+                height: imageHeight,
+                pixelRatio: window.devicePixelRatio * 2,
+                style: {
+                    width:     `${imageWidth}px`,
+                    height:    `${imageHeight}px`,
+                    transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+                },
+            };
+            return format === 'png' ? toPng(el, opts) : toJpeg(el, { ...opts, quality: 0.92 });
+        };
+        onCaptureReady(capture);
+    }, [getNodesBounds, getNodes, onCaptureReady]);
+
+    return null;
+}
+
 /* ─── Section Graph ──────────────────────────────────────────────────────────── */
 
-const RELATIONS: Record<number, string> = {
-    1: 'Se asocia con',
-    2: 'Es parte de',
-    3: 'Es causa de',
-    4: 'Es propiedad de',
-    5: 'Es un',
-};
-
-const RELATION_COLORS: Record<number, string> = {
-    1: '#3b82f6',
-    2: '#10b981',
-    3: '#ef4444',
-    4: '#f59e0b',
-    5: '#8b5cf6',
-};
-
-function SectionGraph({ exec = false, graph_id, onNodeDeleted }: any) {
+function SectionGraph({ exec = false, graph_id, onNodeDeleted, onCaptureReady }: any) {
     const { authFetch } = useAuth();
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-    const [selectedRelation, setSelectedRelation] = useState('1');
+    const [availableRelations, setAvailableRelations] = useState<RelationType[]>([]);
+    const [selectedRelation, setSelectedRelation]     = useState<RelationType | null>(null);
+    const [showRelationModal, setShowRelationModal]   = useState(false);
     const [menu, setMenu] = useState<any>(null);
     const [nodeDeleted, setNodeDeleted] = useState(false);
     const [edgeDeleted, setEdgeDeleted] = useState(false);
@@ -465,6 +654,21 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted }: any) {
     const [category, setCategory] = useState('');
     const [progress, setProgress] = useState<number | null>(null);
     const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const fetchRelations = async () => {
+            try {
+                const res = await authFetch(`${ROUTES.get_relations}?graph_id=${graph_id}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setAvailableRelations(data.relations);
+                    if (data.relations.length > 0)
+                        setSelectedRelation(prev => prev ?? data.relations[0]);
+                }
+            } catch (e) { console.error('Relations error:', e); }
+        };
+        fetchRelations();
+    }, [graph_id, showRelationModal]);
 
     useEffect(() => {
         const fetchProgress = async () => {
@@ -480,12 +684,12 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted }: any) {
     }, [graph_id, exec, nodeDeleted]);
 
     const onConnect = useCallback(async (params: Connection) => {
-        if (!params.source || !params.target) return;
+        if (!params.source || !params.target || !selectedRelation) return;
         const body = {
             graph_id: graph_id.toString(),
             node_id_1: parseInt(params.source),
             node_id_2: parseInt(params.target),
-            connection_type: parseInt(selectedRelation),
+            connection_type: selectedRelation.id,
         };
         try {
             const res = await authFetch(ROUTES.add_edge, {
@@ -502,7 +706,7 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted }: any) {
                         id: `${params.source}-${params.target}`,
                         source: params.source!,
                         target: params.target!,
-                        type: selectedRelation,
+                        ...relationToEdgeProps(selectedRelation),
                     };
                     return addEdge(newEdge, filtered);
                 });
@@ -526,7 +730,7 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted }: any) {
                     id: String(e.id),
                     source: e.source.toString(),
                     target: e.target.toString(),
-                    type: e.relation_id.toString(),
+                    ...relationToEdgeProps(e.relation_style),
                 }));
                 setNodes(newNodes);
                 setEdges(newEdges);
@@ -567,17 +771,21 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted }: any) {
         <div className="graph" ref={ref}>
             {/* Relation selector bar */}
             <div className="relation-selector">
-                {Object.entries(RELATIONS).map(([id, label]) => (
+                {availableRelations.map(rel => (
                     <button
-                        key={id}
-                        className={`relation-option${selectedRelation === id ? ' relation-option--active' : ''}`}
-                        onClick={() => setSelectedRelation(id)}
-                        style={{ '--relation-color': RELATION_COLORS[Number(id)] } as any}
+                        key={rel.id}
+                        className={`relation-option${selectedRelation?.id === rel.id ? ' relation-option--active' : ''}`}
+                        onClick={() => setSelectedRelation(rel)}
+                        style={{ '--relation-color': rel.color } as any}
                     >
-                        <span className="relation-color-line" />
-                        {label}
+                        <span className="relation-color-line"
+                              style={{ borderStyle: rel.is_dashed ? 'dashed' : 'solid' }} />
+                        {rel.type}
                     </button>
                 ))}
+                <button className="btn-add-relation" onClick={() => setShowRelationModal(true)}>
+                    + relaciones
+                </button>
                 {progress !== null && (
                     <div className="progress-indicator">
                         <div className="progress-bar-track">
@@ -596,12 +804,12 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted }: any) {
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
-                    edgeTypes={edgeTypes}
                     onNodeContextMenu={onNodeContextMenu}
                     onPaneClick={onPaneClick}
                     onEdgeClick={onEdgeClick}
                     fitView
                 >
+                    <GraphCapture onCaptureReady={onCaptureReady} />
                     {menu && (
                         <MenuRightClick
                             {...menu}
@@ -628,6 +836,15 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted }: any) {
                     />
                 )}
             </div>
+
+            {/* New relation modal */}
+            {showRelationModal && (
+                <NewRelationModal
+                    graph_id={graph_id}
+                    onClose={() => setShowRelationModal(false)}
+                    onCreated={rel => setAvailableRelations(prev => [...prev, rel])}
+                />
+            )}
         </div>
     );
 }
@@ -673,6 +890,9 @@ export function Analyzer({ graph, setPage }: any) {
     const { authFetch } = useAuth();
     const [exec, setExec] = useState(false);
     const [nodeDeleted, setNodeDeleted] = useState(false);
+    const [showImageMenu, setShowImageMenu] = useState(false);
+    const [capturingImage, setCapturingImage] = useState(false);
+    const captureRef = useRef<CaptureGraphFn | null>(null);
 
     const handleExport = () => {
         const download = async () => {
@@ -690,6 +910,22 @@ export function Analyzer({ graph, setPage }: any) {
         download();
     };
 
+    const handleDownloadImage = async (format: 'png' | 'jpeg') => {
+        setShowImageMenu(false);
+        if (!captureRef.current) return;
+        setCapturingImage(true);
+        try {
+            const dataUrl = await captureRef.current(format);
+            if (!dataUrl) return;
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = `grafo.${format}`;
+            a.click();
+        } finally {
+            setCapturingImage(false);
+        }
+    };
+
     return (
         <div className='contenedor-analyzer'>
             {/* Analyzer sub-toolbar */}
@@ -704,10 +940,28 @@ export function Analyzer({ graph, setPage }: any) {
             }}>
                 <button className="btn-ghost" onClick={() => setPage(1)}>← Regresar</button>
                 <button className="btn-ghost" onClick={handleExport}>↓ Exportar CSV</button>
+                <div className="image-export-wrapper">
+                    <button
+                        className="btn-ghost btn-image-export"
+                        onClick={() => !capturingImage && setShowImageMenu(v => !v)}
+                        disabled={capturingImage}
+                    >
+                        <span style={{ visibility: capturingImage ? 'hidden' : 'visible' }}>
+                            ↓ Exportar imagen
+                        </span>
+                        {capturingImage && <span className="btn-image-export__spinner" aria-hidden />}
+                    </button>
+                    {showImageMenu && (
+                        <div className="image-export-menu" onMouseLeave={() => setShowImageMenu(false)}>
+                            <button onClick={() => handleDownloadImage('png')}>PNG</button>
+                            <button onClick={() => handleDownloadImage('jpeg')}>JPEG</button>
+                        </div>
+                    )}
+                </div>
             </div>
 
             <div className="analyzer">
-                <SectionGraph exec={exec} graph_id={graph} onNodeDeleted={() => setNodeDeleted(p => !p)} />
+                <SectionGraph exec={exec} graph_id={graph} onNodeDeleted={() => setNodeDeleted(p => !p)} onCaptureReady={(fn: CaptureGraphFn) => { captureRef.current = fn; }} />
                 <SectionDesk setExec={setExec} exec={exec} graph_id={graph} nodeDeleted={nodeDeleted} />
             </div>
         </div>

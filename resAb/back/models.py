@@ -29,7 +29,14 @@ class nodes(models.Model):
     graph = models.ForeignKey(graphs, on_delete=models.CASCADE)
 
 class relationship(models.Model):
-    type = models.CharField(max_length=255, null=False)
+    type         = models.CharField(max_length=255, null=False)
+    color        = models.CharField(max_length=20, default='#6366f1')
+    is_dashed    = models.BooleanField(default=False)
+    direction    = models.CharField(max_length=20, default='forward')  # forward | backward | both
+    stroke_width = models.IntegerField(default=2)
+    is_global    = models.IntegerField(default=0)  # 1 = disponible en todos los grafos del user
+    graph        = models.ForeignKey(graphs, on_delete=models.CASCADE, null=True, blank=True)
+    id_user      = models.ForeignKey(users, on_delete=models.CASCADE, null=True, blank=True)
 
 class edge(models.Model):
     from_node = models.ForeignKey(nodes, on_delete=models.CASCADE, related_name="from_node")
