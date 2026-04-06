@@ -150,6 +150,7 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
 }
 if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')  # Confiar en el header del proxy (Railway, etc.)
     SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True") == "True"  # Redirige HTTP → HTTPS
     SECURE_HSTS_SECONDS = 31536000      # HSTS por 1 año
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
