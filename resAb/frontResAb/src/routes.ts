@@ -1,8 +1,8 @@
-const BASE = ""
+const BASE = "http://localhost:8000"
 export const ROUTES = {
     login: `${BASE}/login`,
     sample : `${BASE}/sample`,
-    opc_cut : `${BASE}/opc_cut`,
+    sim_cos : `${BASE}/sim_cos`,
     get_similarity: `${BASE}/get_similarity`,
     new_category: `${BASE}/new_category`,
     delete_tmp: `${BASE}/delete_tmp`,
@@ -14,5 +14,11 @@ export const ROUTES = {
     dowload_csv: `${BASE}/get_categorized_data`,
     delete_node: `${BASE}/delete_node`,
     delete_edge: `${BASE}/delete_edge`,
-    delete_graph: `${BASE}/delete_graph`
+    delete_graph: `${BASE}/delete_graph`,
+    get_progress: `${BASE}/get_progress`,
+    create_relationship: `${BASE}/create_relationship`,
+    get_relations: `${BASE}/get_relations`,
+    update_node_position: `${BASE}/update_node_position`,
+    rename_category : `${BASE}/rename_category`,
+    analysis_status: `${BASE}/analysis_status`,
 }

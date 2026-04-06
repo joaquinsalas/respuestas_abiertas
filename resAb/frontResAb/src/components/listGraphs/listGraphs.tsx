@@ -1,22 +1,25 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ROUTES } from '../../routes.ts'
 import { useAuth } from '../../auth/AuthContext.tsx'
 import './listGraphs.css'
+
+type GraphStatus = 'pending' | 'done' | 'failed';
 
 interface Graph {
     name: string;
     id: string | number;
     date: any;
+    status: GraphStatus;
+    task_id: string | null;
 }
 
 /* ─── Upload Dialog ──────────────────────────────────────────────────────────── */
 
 interface UploadCSVProps {
-    setPage: (v: number) => void;
-    setGraph: (v: number | string) => void;
+    onGraphCreated: (graph: Graph) => void;
 }
 
-const UploadCSV = ({ setPage, setGraph }: UploadCSVProps) => {
+const UploadCSV = ({ onGraphCreated }: UploadCSVProps) => {
     const { authFetch } = useAuth();
     const [columns, setColumns] = useState<string[]>([]);
     const [isColumnIndex] = useState(false);
@@ -60,8 +63,13 @@ const UploadCSV = ({ setPage, setGraph }: UploadCSVProps) => {
             if (response.ok) {
                 const data = await response.json();
                 (document.getElementById('uploadCSV') as HTMLDialogElement)?.close();
-                setGraph(data.graph_id);
-                setPage(2);
+                onGraphCreated({
+                    id: data.graph_id,
+                    name: nameAnalysis,
+                    date: Date.now(),
+                    status: 'pending',
+                    task_id: data.task_id,
+                });
             }
         } finally {
             setLoading(false);
@@ -158,6 +166,12 @@ export const ListGraphs = ({ setPage, setGraph }: ListGraphsProps) => {
     const [graphs, setGraphs] = useState<Graph[]>([]);
     const [deletingId, setDeletingId] = useState<string | number | null>(null);
 
+    // Ref siempre actualizado para evitar stale closure en el interval de polling
+    const graphsRef = useRef<Graph[]>(graphs);
+    useEffect(() => {
+        graphsRef.current = graphs;
+    }, [graphs]);
+
     useEffect(() => {
         const getGraphs = async () => {
             try {
@@ -171,8 +185,40 @@ export const ListGraphs = ({ setPage, setGraph }: ListGraphsProps) => {
         getGraphs();
     }, []);
 
-    const handleOpen = (id: string | number) => {
-        setGraph(id);
+    // Polling cada 5s para grafos pending. Se monta una sola vez.
+    useEffect(() => {
+        const interval = setInterval(async () => {
+            const pending = graphsRef.current.filter(g => g.status === 'pending');
+            if (pending.length === 0) return;
+
+            for (const g of pending) {
+                try {
+                    const res = await authFetch(
+                        `${ROUTES.analysis_status}?graph_id=${g.id}`
+                    );
+                    if (!res.ok) continue;
+                    const data = await res.json();
+                    if (data.status !== 'pending') {
+                        setGraphs(prev =>
+                            prev.map(item =>
+                                item.id === g.id
+                                    ? { ...item, status: data.status as GraphStatus }
+                                    : item
+                            )
+                        );
+                    }
+                } catch {
+                    // error de red: ignorar silenciosamente
+                }
+            }
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, []); // [] intencional: el interval usa graphsRef para evitar stale closure
+
+    const handleOpen = (graph: Graph) => {
+        if (graph.status !== 'done') return;
+        setGraph(graph.id);
         setPage(2);
     };
 
@@ -216,36 +262,62 @@ export const ListGraphs = ({ setPage, setGraph }: ListGraphsProps) => {
                     </div>
                 ) : (
                     graphs
-                        .sort((a, b) => b.date - a.date)
-                        .map(graph => (
-                            <div
-                                key={graph.id}
-                                className="graph-card"
-                                onClick={() => handleOpen(graph.id)}
-                            >
-                                <div className="graph-card-icon">📄</div>
-                                <div className="graph-card-body">
-                                    <div className="graph-card-name">{graph.name}</div>
+                        .sort((a, b) => Number(b.id) - Number(a.id))
+                        .map(graph => {
+                            const isPending   = graph.status === 'pending';
+                            const isFailed    = graph.status === 'failed';
+                            const isClickable = graph.status === 'done';
+
+                            return (
+                                <div
+                                    key={graph.id}
+                                    className={[
+                                        'graph-card',
+                                        isPending ? 'graph-card--pending' : '',
+                                        isFailed  ? 'graph-card--failed'  : '',
+                                    ].filter(Boolean).join(' ')}
+                                    onClick={isClickable ? () => handleOpen(graph) : undefined}
+                                >
+                                    <div className="graph-card-icon">
+                                        {isPending && <span className="graph-spinner" />}
+                                        {isFailed  && <span className="graph-failed-icon">⚠</span>}
+                                        {!isPending && !isFailed && '📄'}
+                                    </div>
+                                    <div className="graph-card-body">
+                                        <div className="graph-card-name">{graph.name}</div>
+                                        {isPending && (
+                                            <div className="graph-card-status-label">Procesando…</div>
+                                        )}
+                                        {isFailed && (
+                                            <div className="graph-card-status-label graph-card-status-label--error">
+                                                Error al procesar
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="graph-card-footer">
+                                        <button
+                                            className="btn-danger-ghost graph-card-delete-btn"
+                                            onClick={(e) => { e.stopPropagation(); handleDelete(e, graph.id); }}
+                                            disabled={deletingId === graph.id || isPending}
+                                            title="Eliminar análisis"
+                                        >
+                                            {deletingId === graph.id ? '…' : '🗑'}
+                                        </button>
+                                        {isClickable && (
+                                            <button className="btn-primary graph-card-btn">
+                                                Abrir →
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
-                                <div className="graph-card-footer">
-                                    <button
-                                        className="btn-danger-ghost graph-card-delete-btn"
-                                        onClick={(e) => handleDelete(e, graph.id)}
-                                        disabled={deletingId === graph.id}
-                                        title="Eliminar análisis"
-                                    >
-                                        {deletingId === graph.id ? '…' : '🗑'}
-                                    </button>
-                                    <button className="btn-primary graph-card-btn">
-                                        Abrir →
-                                    </button>
-                                </div>
-                            </div>
-                        ))
+                            );
+                        })
                 )}
             </div>
 
-            <UploadCSV setPage={setPage} setGraph={setGraph} />
+            <UploadCSV
+                onGraphCreated={(g) => setGraphs(prev => [g, ...prev])}
+            />
         </div>
     );
 };

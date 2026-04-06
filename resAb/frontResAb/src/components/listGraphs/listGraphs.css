@@ -270,3 +270,65 @@ dialog::backdrop {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
+
+/* ─── Spinner ──────────────────────────────────────────────────────────────── */
+
+@keyframes ra-spin {
+  to { transform: rotate(360deg); }
+}
+
+.graph-spinner {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: ra-spin 0.8s linear infinite;
+}
+
+/* ─── Tarjeta pending ──────────────────────────────────────────────────────── */
+
+.graph-card--pending {
+  cursor: default;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.75;
+}
+
+.graph-card--pending:hover {
+  border-color: var(--color-border);
+  box-shadow: none;
+  transform: none;
+}
+
+/* ─── Tarjeta failed ───────────────────────────────────────────────────────── */
+
+.graph-card--failed {
+  cursor: default;
+  user-select: none;
+  border-color: rgba(229, 62, 62, 0.4);
+}
+
+.graph-card--failed:hover {
+  border-color: rgba(229, 62, 62, 0.4);
+  box-shadow: none;
+  transform: none;
+}
+
+.graph-failed-icon {
+  font-size: 1.1rem;
+  color: #e53e3e;
+}
+
+/* ─── Labels de estado ─────────────────────────────────────────────────────── */
+
+.graph-card-status-label {
+  font-size: var(--font-size-xs, 0.75rem);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1, 4px);
+}
+
+.graph-card-status-label--error {
+  color: #e53e3e;
+}

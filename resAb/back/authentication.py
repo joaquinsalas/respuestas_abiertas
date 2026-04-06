@@ -2,7 +2,7 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from .models import users
+from .models import Users
 
 
 class CustomJWTAuthentication(BaseAuthentication):
@@ -13,9 +13,9 @@ class CustomJWTAuthentication(BaseAuthentication):
         token_str = auth.split(' ', 1)[1]
         try:
             token = AccessToken(token_str)
-            user = users.objects.get(pk=token['user_id'])
+            user = Users.objects.get(pk=token['user_id'])
             return (user, token)
         except (InvalidToken, TokenError):
             raise AuthenticationFailed('Token inválido o expirado')
-        except users.DoesNotExist:
+        except Users.DoesNotExist:
             raise AuthenticationFailed('Usuario no encontrado')

@@ -24,7 +24,7 @@ urlpatterns = [
     path('login', views.login_view),
     path('new_analysis', views.new_analysis_request),
     path('get_similarity', views.search_similar),
-    path('opc_cut', views.opc_cut),
+    path('sim_cos', views.calculate_sim_cos),
     path('new_category', views.confirm_new_category),
     path('sample', views.sample),
     path('delete_tmp', views.delete_temp_embedding_endpoint),
@@ -35,5 +35,12 @@ urlpatterns = [
     path('delete_node', views.delete_node),
     path('delete_edge', views.delete_edge),
     path('delete_graph', views.delete_graph),
-    path('', TemplateView.as_view(template_name='index.html'))
+    path('get_progress', views.get_progress),
+    path('create_relationship', views.create_relationship),
+    path('get_relations', views.get_relations),
+    path('rename_category', views.rename_category),
+    path('update_node_position', views.update_node_position),
+    path('', TemplateView.as_view(template_name='index.html')),
+    path('jaja', views.jaja),
+    path('analysis_status', views.analysis_status),
 ]

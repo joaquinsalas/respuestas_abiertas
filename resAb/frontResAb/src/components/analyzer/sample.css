@@ -89,6 +89,15 @@
   box-shadow: var(--shadow-sm);
 }
 
+.sample-item--in-category {
+  background: linear-gradient(
+    135deg,
+    var(--color-surface) 75%,
+    color-mix(in srgb, var(--color-primary) 18%, transparent) 100%
+  );
+  border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
+}
+
 .sample-item--readonly {
   cursor: default;
   background-color: var(--color-surface-2);

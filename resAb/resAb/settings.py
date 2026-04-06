@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import timedelta
+from pgvector.django import IvfflatIndex
 import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -36,6 +37,7 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS','').split(',')
 INSTALLED_APPS = [
     'corsheaders',
     'rest_framework',
+    'django_celery_results',
     'back.apps.BackConfig',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -173,3 +175,8 @@ STORAGES = {
         "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
     },
 }
+
+#Celery
+
+CELERY_BROKER_URL=os.getenv('CELERY_BROKER_URL')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'django-db')

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { toPng, toJpeg } from 'html-to-image'
 import './analyzer.css'
 import './sample.css'
 import { ROUTES } from '../../routes.ts'
@@ -7,11 +8,11 @@ import {
     ReactFlow,
     useNodesState,
     useEdgesState,
+    useReactFlow,
     addEdge,
     Background,
-    BaseEdge,
-    getBezierPath,
-    type EdgeProps,
+    MarkerType,
+    getViewportForBounds,
     type Connection,
     type Edge,
     type Node,
@@ -22,6 +23,7 @@ import '@xyflow/react/dist/style.css';
 interface Data {
     data: string;
     id: string;
+    inCategory?: number;
 }
 
 /* ─── Data Items ─────────────────────────────────────────────────────────────── */
@@ -48,7 +50,7 @@ function DisplayData({
             {data.map(el => (
                 <div
                     key={el.id}
-                    className={`sample-item${readOnly ? ' sample-item--readonly' : ''}`}
+                    className={`sample-item${readOnly ? ' sample-item--readonly' : ''}${el.inCategory === 1 ? ' sample-item--in-category' : ''}`}
                     onClick={() => handleSelect(el.id, el.data)}
                 >
                     {el.data}
@@ -111,6 +113,7 @@ interface DisplaySampleProps {
     categoryProp?: string;
     floating?: boolean;
     onClose?: () => void;
+    refreshTrigger?: boolean;
 }
 
 function DisplaySample({
@@ -121,6 +124,7 @@ function DisplaySample({
     categoryProp = '',
     floating = false,
     onClose,
+    refreshTrigger,
 }: DisplaySampleProps) {
     const { authFetch } = useAuth();
     const [sampleData, setSampleData] = useState<Data[]>([]);
@@ -141,6 +145,7 @@ function DisplaySample({
                 if (!response.ok) throw new Error(`HTTP error ${response.status}`);
                 const json = await response.json();
                 setSampleData(json.data);
+                console.log(json.data);
                 setTotalItems(json.total_items ?? json.data.length);
             } catch (err) {
                 console.error('Error fetching sample:', err);
@@ -149,7 +154,7 @@ function DisplaySample({
             }
         };
         fetchData();
-    }, [random, typeSample, sampleSize, category, page, pageSize, graph_id, query]);
+    }, [random, typeSample, sampleSize, category, page, pageSize, graph_id, query, refreshTrigger]);
 
     const readOnly = typeSample === 1 || typeSample === 2;
 
@@ -207,46 +212,56 @@ function DisplaySample({
 
 /* ─── Review Manager ─────────────────────────────────────────────────────────── */
 
-function ReviewManager({ graph_id, target, setComponent }: any) {
+function ReviewManager({ graph_id, target, setComponent, setReviewParams }: any) {
     const { authFetch } = useAuth();
     const [loading, setLoading] = useState(false);
     const [similarity, setSimilarity] = useState(0.8);
     const [visibleSimilarity, setVisibleSimilarity] = useState<number | string>(similarity);
     const [showSample, setShowSample] = useState(false);
+    const [searchResults, setSearchResults] = useState<Data[]>([]);
+    const [totalItems, setTotalItems] = useState(0);
+    const [page, setPage] = useState(1);
+    const PAGE_SIZE = 10;
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    useEffect(() => {
-        const preAnalysis = async () => {
-            const url = `${ROUTES.opc_cut}?graph_id=${graph_id}&target_id=${target.id}&n_opc=3&min_similarity=0.6`;
-            try { await authFetch(url); }
-            catch (e) { console.error('Pre-analysis error:', e); }
-        };
-        preAnalysis();
+    const fetchResults = useCallback(async (sim: number, p: number) => {
+        setLoading(true);
+        setShowSample(false);
+        const url = `${ROUTES.get_similarity}?graph_id=${graph_id}&target_id=${target.id}&min_similarity=${sim}&page=${p}&page_size=${PAGE_SIZE}`;
+        try {
+            const res = await authFetch(url);
+            if (res.ok) {
+                const json = await res.json();
+                setSearchResults(json.data);
+                setTotalItems(json.total_items);
+                setShowSample(true);
+            }
+        } catch (e) {
+            console.error('Similarity error:', e);
+        } finally {
+            setLoading(false);
+        }
     }, [graph_id, target.id]);
 
     const handleSimilarityChange = (newSim: number) => {
         setSimilarity(newSim);
-        setLoading(true);
-        setShowSample(false);
+        setPage(1);
         if (timerRef.current) clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(async () => {
-            const url = `${ROUTES.get_similarity}?graph_id=${graph_id}&target_id=${target.id}&min_similarity=${newSim}&preanalized=1`;
-            try {
-                const res = await authFetch(url);
-                if (res.ok) setShowSample(true);
-            } catch (e) {
-                console.error('Similarity error:', e);
-            } finally {
-                setLoading(false);
-            }
-        }, 1000);
+        timerRef.current = setTimeout(() => fetchResults(newSim, 1), 1000);
+    };
+
+    const handleNewCategory = () => {
+        if (showSample) {
+            setReviewParams({ targetId: String(target.id), minSim: similarity });
+            setComponent(4);
+        }
     };
 
     return (
         <div className="review-manager">
             <div className="review-manager-top">
-                <button className="btn-primary create-category-btn" onClick={() => setComponent(4)}>
-                    Crear categoría
+                <button className="btn-primary create-category-btn" onClick={handleNewCategory}>
+                    {loading ? 'Cargando' : 'Crear categoría'}
                 </button>
             </div>
             <div className="review-layout">
@@ -258,23 +273,21 @@ function ReviewManager({ graph_id, target, setComponent }: any) {
                         max="1"
                         step="0.001"
                         value={similarity}
-                        onChange={e => {handleSimilarityChange(parseFloat(e.target.value));
-                            setVisibleSimilarity(parseFloat(e.target.value).toFixed(3));
+                        onChange={e => {
+                            const v = parseFloat(e.target.value);
+                            setVisibleSimilarity(v.toFixed(3));
+                            handleSimilarityChange(v);
                         }}
                         className="vertical-slider"
                     />
-                    {/*<span className="similarity-label">{similarity.toFixed(3)}</span> */}
                     <input
                         type="text"
                         value={visibleSimilarity}
                         className="similarity-input"
-                        
                         onChange={e => {
                             const v = parseFloat(e.target.value);
                             setVisibleSimilarity(e.target.value);
-
-                            if (!isNaN(v) && v >= 0 && v <= 1) {handleSimilarityChange(v);
-                            }
+                            if (!isNaN(v) && v >= 0 && v <= 1) handleSimilarityChange(v);
                         }}
                     />
                 </div>
@@ -289,23 +302,33 @@ function ReviewManager({ graph_id, target, setComponent }: any) {
                         {loading ? (
                             <div className="loader-container"><div className="loader" /></div>
                         ) : showSample ? (
-                            <DisplaySample
-                                graph_id={graph_id}
-                                initialTypeSample={2}
-                                setComponent={setComponent}
-                                setTarget={() => {}}
-                            />
+                            <>
+                                <DisplayData data={searchResults} setTarget={() => {}} setComponent={() => {}} readOnly={true} />
+                                <div className="sample-footer">
+                                    <span className="sample-count">{totalItems} resultados</span>
+                                    <Pagination
+                                        page={page}
+                                        pageSize={PAGE_SIZE}
+                                        totalItems={totalItems}
+                                        setPage={(p: number) => {
+                                            setPage(p);
+                                            fetchResults(similarity, p);
+                                        }}
+                                    />
+                                </div>
+                                <button className="btn-ghost" style={{ fontSize: 'var(--font-size-xs)' }} onClick={() => setComponent(1)}>
+                                    ← Volver
+                                </button>
+                            </>
                         ) : (
                             <div>
-                                    <div className="review-placeholder">
-                                        Mueve el deslizador para ver resultados similares
-                                    </div>
-                            
-                                    <button className="btn-ghost" style={{ fontSize: 'var(--font-size-xs)' }} onClick={() => setComponent(1)}>
-                                        ← Volver
-                                    </button>
+                                <div className="review-placeholder">
+                                    Mueve el deslizador para ver resultados similares
+                                </div>
+                                <button className="btn-ghost" style={{ fontSize: 'var(--font-size-xs)' }} onClick={() => setComponent(1)}>
+                                    ← Volver
+                                </button>
                             </div>
-                          
                         )}
                     </div>
                 </div>
@@ -321,14 +344,17 @@ interface ConfirmCategoryProps {
     setComponent: (n: number) => void;
     setExec: (v: boolean) => void;
     exec: boolean;
+    targetId: string;
+    minSimilarity: number;
 }
 
-export function ConfirmCategory({ graph_id, setComponent, setExec, exec }: ConfirmCategoryProps) {
+export function ConfirmCategory({ graph_id, setComponent, setExec, exec, targetId, minSimilarity }: ConfirmCategoryProps) {
     const { authFetch } = useAuth();
     const [categoryName, setCategoryName] = useState('');
+    const [blockResponses, setBlockResponses] = useState(false);
 
     const handleConfirm = async () => {
-        const url = `${ROUTES.new_category}?graph_id=${graph_id}&name=${categoryName}`;
+        const url = `${ROUTES.new_category}?graph_id=${graph_id}&name=${categoryName}&target_id=${targetId}&min_similarity=${minSimilarity}${blockResponses ? '&block=1' : ''}`;
         try {
             const res = await authFetch(url);
             if (res.ok) {
@@ -354,6 +380,14 @@ export function ConfirmCategory({ graph_id, setComponent, setExec, exec }: Confi
                     autoFocus
                 />
             </div>
+            <label className="confirm-category-block-label">
+                <input
+                    type="checkbox"
+                    checked={blockResponses}
+                    onChange={e => setBlockResponses(e.target.checked)}
+                />
+                ¿Desea restringir estas respuestas de futuras categorías?
+            </label>
             <div className="confirm-category-actions">
                 <button className="btn-ghost" onClick={() => setComponent(2)}>← Atrás</button>
                 <button
@@ -368,39 +402,118 @@ export function ConfirmCategory({ graph_id, setComponent, setExec, exec }: Confi
     );
 }
 
-/* ─── Custom Edges ───────────────────────────────────────────────────────────── */
+/* ─── Rename Modal ───────────────────────────────────────────────────────────── */
 
-const makeEdge = (color: string) => (props: EdgeProps) => {
-    const [path] = getBezierPath(props);
-    return <BaseEdge path={path} {...props} style={{ stroke: color, strokeWidth: 2 }} />;
-};
+function RenameModal({ currentName, graph_id, node_id, onClose, onRenamed }: {
+    currentName: string;
+    graph_id: any;
+    node_id: any;
+    onClose: () => void;
+    onRenamed: (newName: string) => void;
+}) {
+    const { authFetch } = useAuth();
+    const [newName, setNewName] = useState(currentName);
+    const [saving, setSaving]   = useState(false);
+    const [error, setError]     = useState('');
 
-const edgeTypes = {
-    '1': makeEdge('#3b82f6'),
-    '2': makeEdge('#10b981'),
-    '3': makeEdge('#ef4444'),
-    '4': makeEdge('#f59e0b'),
-    '5': makeEdge('#8b5cf6'),
-};
+    const handleSave = async () => {
+        const trimmed = newName.trim();
+        if (!trimmed) return;
+        setSaving(true);
+        setError('');
+        try {
+            const res = await authFetch(ROUTES.rename_category, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ graph_id, node_id, new_name: trimmed }),
+            });
+            if (res.ok) {
+                onRenamed(trimmed);
+                onClose();
+            } else {
+                const msg = await res.text();
+                setError(msg || 'Error al renombrar');
+            }
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') handleSave();
+        if (e.key === 'Escape') onClose();
+    };
+
+    console.log("no me renderizo");
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-box" onClick={e => e.stopPropagation()}>
+                <h2 className="modal-title">Renombrar categoría</h2>
+
+                <div className="modal-field">
+                    <label>Nuevo nombre</label>
+                    <input
+                        type="text"
+                        value={newName}
+                        onChange={e => setNewName(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        autoFocus
+                    />
+                </div>
+
+                {error && <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.85rem' }}>{error}</p>}
+
+                <div className="modal-actions">
+                    <button className="btn-ghost" onClick={onClose}>Cancelar</button>
+                    <button
+                        className="btn-primary"
+                        onClick={handleSave}
+                        disabled={!newName.trim() || saving}
+                    >
+                        {saving ? 'Guardando…' : 'Guardar'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 /* ─── Context Menu ───────────────────────────────────────────────────────────── */
 
 const MenuRightClick = ({
     id, top, left, right, bottom,
-    graph_id, exec, onPaneClick, setExec,
-    setData, category, setShowData,
+    graph_id, onPaneClick, setExec,
+    setData, category, setShowData, onNodeDeleted,
     ...props
 }: any) => {
     const { authFetch } = useAuth();
+    const [showRenameModal, setShowRenameModal] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+    const [deleteError, setDeleteError] = useState('');
 
     const handleDelete = async () => {
-        const res = await authFetch(ROUTES.delete_node, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ node_id: id, graph_id }),
-        });
-        if (res.ok) { onPaneClick(); setExec(!exec); }
-        else console.error('Failed to delete node');
+        if (!window.confirm(`¿Eliminar la categoría "${category}"? Esta acción no se puede deshacer.`)) return;
+        setDeleting(true);
+        setDeleteError('');
+        try {
+            const res = await authFetch(ROUTES.delete_node, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ node_id: id, graph_id }),
+            });
+            if (res.ok) {
+                onPaneClick();
+                setExec((p: boolean) => !p);
+                onNodeDeleted();
+            } else {
+                const msg = await res.text();
+                setDeleteError(msg || 'Error al eliminar');
+            }
+        } catch {
+            setDeleteError('Error de red');
+        } finally {
+            setDeleting(false);
+        }
     };
 
     const handleView = () => {
@@ -410,50 +523,310 @@ const MenuRightClick = ({
     };
 
     return (
-        <div style={{ top, left, right, bottom }} className="context-menu" {...props}>
-            <button onClick={handleView}>Ver datos</button>
-            <button className="btn-danger" onClick={handleDelete}>Eliminar</button>
-        </div>
+        <>
+            <div style={{ top, left, right, bottom }} className="context-menu" {...props}>
+                <button onClick={handleView}>Ver datos</button>
+                <button onClick={() => setShowRenameModal(true)}>Renombrar</button>
+                <button
+                    className="btn-danger"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                >
+                    {deleting ? 'Eliminando…' : 'Eliminar'}
+                </button>
+                {deleteError && (
+                    <span className="context-menu-error">{deleteError}</span>
+                )}
+            </div>
+
+            {showRenameModal && (
+                <RenameModal
+                    currentName={category}
+                    graph_id={graph_id}
+                    node_id={id}
+                    onClose={() => setShowRenameModal(false)}
+                    onRenamed={() => setExec((p: boolean) => !p)}
+                />
+            )}
+        </>
     );
 };
 
+/* ─── Relation Types ─────────────────────────────────────────────────────────── */
+
+interface RelationType {
+    id: number;
+    type: string;
+    color: string;
+    is_dashed: boolean;
+    direction: 'forward' | 'backward' | 'both';
+    stroke_width: number;
+    is_global: number;
+}
+
+function relationToEdgeProps(style: RelationType): Partial<Edge> {
+    const { color, direction, stroke_width, is_dashed } = style;
+    return {
+        style: {
+            stroke: color,
+            strokeWidth: stroke_width,
+            strokeDasharray: is_dashed ? '6,3' : undefined,
+        },
+        markerEnd: (direction === 'forward' || direction === 'both')
+            ? { type: MarkerType.ArrowClosed, color }
+            : undefined,
+        markerStart: (direction === 'backward' || direction === 'both')
+            ? { type: MarkerType.ArrowClosed, color }
+            : undefined,
+    };
+}
+
+/* ─── New Relation Modal ─────────────────────────────────────────────────────── */
+
+function NewRelationModal({ graph_id, onClose, onCreated }: {
+    graph_id: any;
+    onClose: () => void;
+    onCreated: (rel: RelationType) => void;
+}) {
+    const { authFetch } = useAuth();
+    const [label, setLabel]               = useState('');
+    const [color, setColor]               = useState('#6366f1');
+    const [isDashed, setIsDashed]         = useState(false);
+    const [direction, setDirection]       = useState<'forward' | 'backward' | 'both'>('forward');
+    const [strokeWidth, setStrokeWidth]   = useState(2);
+    const [isGlobal, setIsGlobal]         = useState(false);
+    const [saving, setSaving]             = useState(false);
+
+    const handleSave = async () => {
+        if (!label.trim()) return;
+        setSaving(true);
+        try {
+            const res = await authFetch(ROUTES.create_relationship, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    graph_id,
+                    type: label.trim(),
+                    color,
+                    is_dashed: isDashed,
+                    direction,
+                    stroke_width: strokeWidth,
+                    is_global: isGlobal ? 1 : 0,
+                }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                onCreated({
+                    id: data.id, type: label.trim(), color,
+                    is_dashed: isDashed, direction,
+                    stroke_width: strokeWidth, is_global: isGlobal ? 1 : 0,
+                });
+                onClose();
+            }
+        } finally { setSaving(false); }
+    };
+
+    const showEnd   = direction === 'forward'  || direction === 'both';
+    const showStart = direction === 'backward' || direction === 'both';
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-box" onClick={e => e.stopPropagation()}>
+                <h2 className="modal-title">Nueva relación</h2>
+
+                <div className="modal-field">
+                    <label>Nombre</label>
+                    <input
+                        type="text"
+                        value={label}
+                        onChange={e => setLabel(e.target.value)}
+                        placeholder="Ej. Depende de"
+                        autoFocus
+                    />
+                </div>
+
+                <div className="modal-row">
+                    <div className="modal-field">
+                        <label>Color</label>
+                        <input type="color" value={color} onChange={e => setColor(e.target.value)} />
+                    </div>
+                    <div className="modal-field">
+                        <label>Grosor ({strokeWidth}px)</label>
+                        <input
+                            type="range" min={1} max={6} value={strokeWidth}
+                            onChange={e => setStrokeWidth(Number(e.target.value))}
+                        />
+                    </div>
+                </div>
+
+                <div className="modal-field">
+                    <label>Trazo</label>
+                    <label className="modal-toggle">
+                        <input type="checkbox" checked={isDashed} onChange={e => setIsDashed(e.target.checked)} />
+                        Punteado
+                    </label>
+                </div>
+
+                <div className="modal-field">
+                    <label>Dirección</label>
+                    <div className="direction-options">
+                        {(['forward', 'backward', 'both'] as const).map(d => (
+                            <label key={d} className={`direction-option${direction === d ? ' direction-option--active' : ''}`}>
+                                <input type="radio" name="direction" value={d}
+                                       checked={direction === d} onChange={() => setDirection(d)} />
+                                {d === 'forward' ? 'A → B' : d === 'backward' ? 'A ← B' : 'A ↔ B'}
+                            </label>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Live preview */}
+                <div className="relation-preview">
+                    <svg width="100%" height="50" viewBox="0 0 240 50">
+                        <defs>
+                            {showEnd && (
+                                <marker id="prev-end" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                                    <path d="M0,0 L0,6 L8,3 z" fill={color} />
+                                </marker>
+                            )}
+                            {showStart && (
+                                <marker id="prev-start" markerWidth="8" markerHeight="8" refX="2" refY="3" orient="auto-start-reverse">
+                                    <path d="M0,0 L0,6 L8,3 z" fill={color} />
+                                </marker>
+                            )}
+                        </defs>
+                        <line
+                            x1="20" y1="25" x2="220" y2="25"
+                            stroke={color}
+                            strokeWidth={strokeWidth}
+                            strokeDasharray={isDashed ? '8,4' : undefined}
+                            markerEnd={showEnd ? 'url(#prev-end)' : undefined}
+                            markerStart={showStart ? 'url(#prev-start)' : undefined}
+                        />
+                        <text x="120" y="18" textAnchor="middle"
+                              fontSize="11" fill={color} opacity={0.8}>
+                            {label || 'Previsualización'}
+                        </text>
+                    </svg>
+                </div>
+
+                <label className="modal-toggle">
+                    <input type="checkbox" checked={isGlobal} onChange={e => setIsGlobal(e.target.checked)} />
+                    Disponible en todos mis grafos (global)
+                </label>
+
+                <div className="modal-actions">
+                    <button className="btn-ghost" onClick={onClose}>Cancelar</button>
+                    <button className="btn-primary" onClick={handleSave}
+                            disabled={!label.trim() || saving}>
+                        {saving ? 'Guardando…' : 'Guardar'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ─── Graph Capture ──────────────────────────────────────────────────────────── */
+
+type CaptureGraphFn = (format: 'png' | 'jpeg') => Promise<string | null>;
+
+function GraphCapture({ onCaptureReady }: { onCaptureReady: (fn: CaptureGraphFn) => void }) {
+    const { getNodesBounds, getNodes } = useReactFlow();
+
+    useEffect(() => {
+        const capture: CaptureGraphFn = async (format) => {
+            const nodes = getNodes();
+            if (!nodes.length) return null;
+            const imageWidth  = 1920;
+            const imageHeight = 1080;
+            const bounds   = getNodesBounds(nodes);
+            const viewport = getViewportForBounds(bounds, imageWidth, imageHeight, 0.1, 2, 0.1);
+            const el = document.querySelector<HTMLElement>('.react-flow__viewport');
+            if (!el) return null;
+            const bgColor = getComputedStyle(document.documentElement)
+                .getPropertyValue('--color-bg').trim() || '#ffffff';
+            const opts = {
+                backgroundColor: bgColor,
+                width: imageWidth,
+                height: imageHeight,
+                pixelRatio: window.devicePixelRatio * 2,
+                style: {
+                    width:     `${imageWidth}px`,
+                    height:    `${imageHeight}px`,
+                    transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+                },
+            };
+            return format === 'png' ? toPng(el, opts) : toJpeg(el, { ...opts, quality: 0.92 });
+        };
+        onCaptureReady(capture);
+    }, [getNodesBounds, getNodes, onCaptureReady]);
+
+    return null;
+}
+
 /* ─── Section Graph ──────────────────────────────────────────────────────────── */
 
-const RELATIONS: Record<number, string> = {
-    1: 'Se asocia con',
-    2: 'Es parte de',
-    3: 'Es causa de',
-    4: 'Es propiedad de',
-    5: 'Es un',
-};
-
-const RELATION_COLORS: Record<number, string> = {
-    1: '#3b82f6',
-    2: '#10b981',
-    3: '#ef4444',
-    4: '#f59e0b',
-    5: '#8b5cf6',
-};
-
-function SectionGraph({ exec = false, graph_id }: any) {
+function SectionGraph({ exec = false, graph_id, onNodeDeleted, onCaptureReady }: any) {
     const { authFetch } = useAuth();
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-    const [selectedRelation, setSelectedRelation] = useState('1');
+    const [availableRelations, setAvailableRelations] = useState<RelationType[]>([]);
+    const [selectedRelation, setSelectedRelation]     = useState<RelationType | null>(null);
+    const [showRelationModal, setShowRelationModal]   = useState(false);
     const [menu, setMenu] = useState<any>(null);
     const [nodeDeleted, setNodeDeleted] = useState(false);
     const [edgeDeleted, setEdgeDeleted] = useState(false);
     const [showData, setShowData] = useState(false);
     const [category, setCategory] = useState('');
+    const [progress, setProgress] = useState<number | null>(null);
     const ref = useRef<HTMLDivElement>(null);
 
+    useEffect(() => {
+        const fetchRelations = async () => {
+            try {
+                const res = await authFetch(`${ROUTES.get_relations}?graph_id=${graph_id}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setAvailableRelations(data.relations);
+                    if (data.relations.length > 0)
+                        setSelectedRelation(prev => prev ?? data.relations[0]);
+                }
+            } catch (e) { console.error('Relations error:', e); }
+        };
+        fetchRelations();
+    }, [graph_id, showRelationModal]);
+
+    useEffect(() => {
+        const fetchProgress = async () => {
+            try {
+                const res = await authFetch(`${ROUTES.get_progress}?graph_id=${graph_id}`);
+                if (res.ok) {
+                    const json = await res.json();
+                    setProgress(json.progress);
+                }
+            } catch (e) { console.error('Progress error:', e); }
+        };
+        fetchProgress();
+    }, [graph_id, exec, nodeDeleted]);
+
+    const saveNodePosition = useCallback(async (nodeId: string, x: number, y: number) => {
+        try {
+            await authFetch(ROUTES.update_node_position, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ graph_id, node_id: parseInt(nodeId), pos_x: x, pos_y: y }),
+            });
+        } catch (e) { console.error('Position save error:', e); }
+    }, [graph_id, authFetch]);
+
     const onConnect = useCallback(async (params: Connection) => {
-        if (!params.source || !params.target) return;
+        if (!params.source || !params.target || !selectedRelation) return;
         const body = {
             graph_id: graph_id.toString(),
             node_id_1: parseInt(params.source),
             node_id_2: parseInt(params.target),
-            connection_type: parseInt(selectedRelation),
+            connection_type: selectedRelation.id,
         };
         try {
             const res = await authFetch(ROUTES.add_edge, {
@@ -470,7 +843,7 @@ function SectionGraph({ exec = false, graph_id }: any) {
                         id: `${params.source}-${params.target}`,
                         source: params.source!,
                         target: params.target!,
-                        type: selectedRelation,
+                        ...relationToEdgeProps(selectedRelation),
                     };
                     return addEdge(newEdge, filtered);
                 });
@@ -485,23 +858,41 @@ function SectionGraph({ exec = false, graph_id }: any) {
                 if (!res.ok) throw new Error('Error loading graph');
                 const data: { nodes: any[]; edges: any[] } = await res.json();
 
-                const newNodes: Node[] = data.nodes.map((n, i) => ({
-                    id: n.id.toString(),
-                    data: { label: n.name },
-                    position: { x: (i % 5) * 200, y: Math.floor(i / 5) * 120 },
-                }));
+                const newNodes: Node[] = data.nodes.map((n, i) => {
+                    const hasPos = n.pos_x !== null && n.pos_y !== null;
+                    return {
+                        id: n.id.toString(),
+                        data: { label: n.name },
+                        position: hasPos
+                            ? { x: n.pos_x, y: n.pos_y }
+                            : { x: (i % 5) * 200, y: Math.floor(i / 5) * 120 },
+                    };
+                });
                 const newEdges: Edge[] = data.edges.map(e => ({
                     id: String(e.id),
                     source: e.source.toString(),
                     target: e.target.toString(),
-                    type: e.relation_id.toString(),
+                    ...relationToEdgeProps(e.relation_style),
                 }));
                 setNodes(newNodes);
                 setEdges(newEdges);
+
+                // Persistir inmediatamente las posiciones fallback de nodos sin coordenadas en BD
+                const unpositioned = data.nodes.filter((n: any) => n.pos_x === null || n.pos_y === null);
+                if (unpositioned.length > 0) {
+                    Promise.all(unpositioned.map((n: any) => {
+                        const i = data.nodes.indexOf(n);
+                        return saveNodePosition(n.id.toString(), (i % 5) * 200, Math.floor(i / 5) * 120);
+                    }));
+                }
             } catch (e) { console.error(e); }
         };
         fetchGraph();
     }, [graph_id, exec, nodeDeleted, edgeDeleted]);
+
+    const onNodeDragStop = useCallback((_event: any, node: Node) => {
+        saveNodePosition(node.id, node.position.x, node.position.y);
+    }, [saveNodePosition]);
 
     const onNodeContextMenu = useCallback((event: any, nodo: any) => {
         event.preventDefault();
@@ -535,17 +926,29 @@ function SectionGraph({ exec = false, graph_id }: any) {
         <div className="graph" ref={ref}>
             {/* Relation selector bar */}
             <div className="relation-selector">
-                {Object.entries(RELATIONS).map(([id, label]) => (
+                {availableRelations.map(rel => (
                     <button
-                        key={id}
-                        className={`relation-option${selectedRelation === id ? ' relation-option--active' : ''}`}
-                        onClick={() => setSelectedRelation(id)}
-                        style={{ '--relation-color': RELATION_COLORS[Number(id)] } as any}
+                        key={rel.id}
+                        className={`relation-option${selectedRelation?.id === rel.id ? ' relation-option--active' : ''}`}
+                        onClick={() => setSelectedRelation(rel)}
+                        style={{ '--relation-color': rel.color } as any}
                     >
-                        <span className="relation-color-line" />
-                        {label}
+                        <span className="relation-color-line"
+                              style={{ borderStyle: rel.is_dashed ? 'dashed' : 'solid' }} />
+                        {rel.type}
                     </button>
                 ))}
+                <button className="btn-add-relation" onClick={() => setShowRelationModal(true)}>
+                    + relaciones
+                </button>
+                {progress !== null && (
+                    <div className="progress-indicator">
+                        <div className="progress-bar-track">
+                            <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
+                        </div>
+                        <span className="progress-label">{progress}% categorizado</span>
+                    </div>
+                )}
             </div>
 
             {/* ReactFlow canvas */}
@@ -556,12 +959,13 @@ function SectionGraph({ exec = false, graph_id }: any) {
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
-                    edgeTypes={edgeTypes}
+                    onNodeDragStop={onNodeDragStop}
                     onNodeContextMenu={onNodeContextMenu}
                     onPaneClick={onPaneClick}
                     onEdgeClick={onEdgeClick}
                     fitView
                 >
+                    <GraphCapture onCaptureReady={onCaptureReady} />
                     {menu && (
                         <MenuRightClick
                             {...menu}
@@ -571,6 +975,7 @@ function SectionGraph({ exec = false, graph_id }: any) {
                             exec={nodeDeleted}
                             setData={setCategory}
                             setShowData={setShowData}
+                            onNodeDeleted={onNodeDeleted}
                         />
                     )}
                     <Background />
@@ -587,15 +992,25 @@ function SectionGraph({ exec = false, graph_id }: any) {
                     />
                 )}
             </div>
+
+            {/* New relation modal */}
+            {showRelationModal && (
+                <NewRelationModal
+                    graph_id={graph_id}
+                    onClose={() => setShowRelationModal(false)}
+                    onCreated={rel => setAvailableRelations(prev => [...prev, rel])}
+                />
+            )}
         </div>
     );
 }
 
 /* ─── Section Desk ───────────────────────────────────────────────────────────── */
 
-function SectionDesk({ exec, setExec, graph_id }: any) {
+function SectionDesk({ exec, setExec, graph_id, nodeDeleted }: any) {
     const [currentComponent, setCurrentComponent] = useState(1);
     const [target, setTarget] = useState<{ data: string; id: string | number }>();
+    const [reviewParams, setReviewParams] = useState<{ targetId: string; minSim: number } | null>(null);
 
     return (
         <section className="desk">
@@ -604,6 +1019,7 @@ function SectionDesk({ exec, setExec, graph_id }: any) {
                     setComponent={setCurrentComponent}
                     setTarget={setTarget}
                     graph_id={graph_id}
+                    refreshTrigger={nodeDeleted}
                 />
             )}
             {currentComponent === 2 && target && (
@@ -611,14 +1027,17 @@ function SectionDesk({ exec, setExec, graph_id }: any) {
                     graph_id={graph_id}
                     target={target}
                     setComponent={setCurrentComponent}
+                    setReviewParams={setReviewParams}
                 />
             )}
-            {currentComponent === 4 && (
+            {currentComponent === 4 && reviewParams && (
                 <ConfirmCategory
                     graph_id={graph_id}
                     setComponent={setCurrentComponent}
                     setExec={setExec}
                     exec={exec}
+                    targetId={reviewParams.targetId}
+                    minSimilarity={reviewParams.minSim}
                 />
             )}
         </section>
@@ -630,6 +1049,10 @@ function SectionDesk({ exec, setExec, graph_id }: any) {
 export function Analyzer({ graph, setPage }: any) {
     const { authFetch } = useAuth();
     const [exec, setExec] = useState(false);
+    const [nodeDeleted, setNodeDeleted] = useState(false);
+    const [showImageMenu, setShowImageMenu] = useState(false);
+    const [capturingImage, setCapturingImage] = useState(false);
+    const captureRef = useRef<CaptureGraphFn | null>(null);
 
     const handleExport = () => {
         const download = async () => {
@@ -647,6 +1070,22 @@ export function Analyzer({ graph, setPage }: any) {
         download();
     };
 
+    const handleDownloadImage = async (format: 'png' | 'jpeg') => {
+        setShowImageMenu(false);
+        if (!captureRef.current) return;
+        setCapturingImage(true);
+        try {
+            const dataUrl = await captureRef.current(format);
+            if (!dataUrl) return;
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = `grafo.${format}`;
+            a.click();
+        } finally {
+            setCapturingImage(false);
+        }
+    };
+
     return (
         <div className='contenedor-analyzer'>
             {/* Analyzer sub-toolbar */}
@@ -661,11 +1100,29 @@ export function Analyzer({ graph, setPage }: any) {
             }}>
                 <button className="btn-ghost" onClick={() => setPage(1)}>← Regresar</button>
                 <button className="btn-ghost" onClick={handleExport}>↓ Exportar CSV</button>
+                <div className="image-export-wrapper">
+                    <button
+                        className="btn-ghost btn-image-export"
+                        onClick={() => !capturingImage && setShowImageMenu(v => !v)}
+                        disabled={capturingImage}
+                    >
+                        <span style={{ visibility: capturingImage ? 'hidden' : 'visible' }}>
+                            ↓ Exportar imagen
+                        </span>
+                        {capturingImage && <span className="btn-image-export__spinner" aria-hidden />}
+                    </button>
+                    {showImageMenu && (
+                        <div className="image-export-menu" onMouseLeave={() => setShowImageMenu(false)}>
+                            <button onClick={() => handleDownloadImage('png')}>PNG</button>
+                            <button onClick={() => handleDownloadImage('jpeg')}>JPEG</button>
+                        </div>
+                    )}
+                </div>
             </div>
 
             <div className="analyzer">
-                <SectionGraph exec={exec} graph_id={graph} />
-                <SectionDesk setExec={setExec} exec={exec} graph_id={graph} />
+                <SectionGraph exec={exec} graph_id={graph} onNodeDeleted={() => setNodeDeleted(p => !p)} onCaptureReady={(fn: CaptureGraphFn) => { captureRef.current = fn; }} />
+                <SectionDesk setExec={setExec} exec={exec} graph_id={graph} nodeDeleted={nodeDeleted} />
             </div>
         </div>
     );

@@ -20,6 +20,10 @@ export default defineConfig({
       '/delete_node': 'http://localhost:8000',
       '/delete_edge': 'http://localhost:8000',
       '/delete_graph': 'http://localhost:8000',
+      '/create_relationship': 'http://localhost:8000',
+      '/get_relations': 'http://localhost:8000',
+      '/get_progress': 'http://localhost:8000',
+      '/update_node_position': 'http://localhost:8000',
     },
   },
 })
