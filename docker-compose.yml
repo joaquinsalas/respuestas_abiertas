@@ -123,7 +123,7 @@ services:
       context: ./resAb
       dockerfile: Dockerfile
     restart: unless-stopped
-    command: celery -A resAb worker --loglevel=info --concurrency=2
+    command: celery -A resAb worker --loglevel=debug --concurrency=2
     depends_on:
       db:
         condition: service_healthy
