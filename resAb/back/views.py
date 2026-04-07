@@ -1,3 +1,4 @@
+import logging
 import pandas as pd
 from django.http import HttpResponse
 import s3fs, os, random
@@ -16,6 +17,8 @@ from .task import process_graph
 from pgvector.django import CosineDistance
 
 from django.views.decorators.csrf import csrf_exempt
+
+logger = logging.getLogger('back.views')
 
 # ---------------------------------------------------------------------------
 # S3 helpers
@@ -111,6 +114,7 @@ def login_view(request):
     try:
         user = Users.objects.get(name=name)
     except Users.DoesNotExist:
+        logger.error("login_view: usuario no encontrado name=%s", name)
         return Response({'error': 'Credenciales inválidas'}, status=401)
     if not user.check_password(password):
         return Response({'error': 'Credenciales inválidas'}, status=401)
@@ -146,6 +150,10 @@ def new_analysis_request(request):
     try:
         data = pl.read_csv(file)
     except Exception:
+        logger.error(
+            "new_analysis_request: CSV inválido user_id=%s filename=%s",
+            request.user.pk, file.name, exc_info=True,
+        )
         return Response("CSV inválido o corrupto", status=400)
 
     if text_column not in data.columns:
@@ -167,6 +175,10 @@ def new_analysis_request(request):
     try:
         save_or_update_tree_s3(f"{base}/raw.parquet", data)
     except Exception as exc:
+        logger.error(
+            "new_analysis_request: error subiendo a S3 user_id=%s graph_id=%s filename=%s",
+            user.pk, graph.pk, file.name, exc_info=True,
+        )
         graph.delete()
         return Response(f"Error subiendo archivo: {exc}", status=500)
 
@@ -186,7 +198,17 @@ def analysis_status(request):
     try:
         graph = Graphs.objects.get(id_user=request.user, id=graph_id)
     except Graphs.DoesNotExist:
+        logger.error(
+            "analysis_status: grafo no encontrado user_id=%s graph_id=%s",
+            request.user.pk, graph_id,
+        )
         return Response("Grafo no encontrado", status=404)
+    except Exception:
+        logger.error(
+            "analysis_status: error inesperado user_id=%s graph_id=%s",
+            request.user.pk, graph_id, exc_info=True,
+        )
+        return Response("Error interno", status=500)
     return Response({"graph_id": graph.pk, "status": graph.status})
 
 
@@ -200,17 +222,29 @@ def search_similar(request):
         page      = int(request.GET.get("page", 1))
         page_size = int(request.GET.get("page_size", 10))
     except Exception as e:
+        logger.error(
+            "search_similar: parámetros inválidos user_id=%s — %s",
+            request.user.pk, e,
+        )
         return Response(f"Error en los datos proporcionados {e}", status=400)
 
     user = request.user
     try:
         graph = Graphs.objects.get(id_user=user, id=graph_id)
     except Graphs.DoesNotExist:
+        logger.error(
+            "search_similar: grafo no encontrado user_id=%s graph_id=%s",
+            user.pk, graph_id,
+        )
         return Response("Grafo no encontrado", status=400)
 
     try:
         target_data = Data.objects.get(graph=graph, id_data=target_id)
     except Data.DoesNotExist:
+        logger.error(
+            "search_similar: target_id no encontrado user_id=%s graph_id=%s target_id=%s",
+            user.pk, graph_id, target_id,
+        )
         return Response("ID no encontrado", status=400)
 
     max_dist = 1.0 - min_sim  # CosineDistance = 1 - CosineSimilarity
@@ -235,6 +269,10 @@ def search_similar(request):
     try:
         raw_df = read_parquet_s3_pl(f"{user.pk}/{graph_id}/raw.parquet")
     except FileNotFoundError:
+        logger.error(
+            "search_similar: raw.parquet no encontrado user_id=%s graph_id=%s",
+            user.pk, graph_id,
+        )
         return Response("Datos no encontrados", status=404)
 
     id_to_text = {
@@ -274,14 +312,36 @@ def delete_temp_embedding_endpoint(request):
     try:
         Graphs.objects.get(id_user=user, id=graph_id)
     except Graphs.DoesNotExist:
+        logger.error(
+            "delete_temp_embedding: grafo no encontrado user_id=%s graph_id=%s",
+            user.pk, graph_id,
+        )
         return Response("Grafo no encontrado", status=400)
 
-    delete_parquet_s3(f"{user.pk}/{graph_id}/temp_emb.parquet")
+    try:
+        delete_parquet_s3(f"{user.pk}/{graph_id}/temp_emb.parquet")
+    except FileNotFoundError:
+        logger.warning(
+            "delete_temp_embedding: temp_emb.parquet no existía user_id=%s graph_id=%s",
+            user.pk, graph_id,
+        )
+    except Exception:
+        logger.error(
+            "delete_temp_embedding: error eliminando temp_emb.parquet user_id=%s graph_id=%s",
+            user.pk, graph_id, exc_info=True,
+        )
+        return Response("Error eliminando archivo temporal", status=500)
+
     return HttpResponse(status=204)
 
 @csrf_exempt
 def jaja(request):
-    print(make_demo.delay(2,2).id)
+    try:
+        task_id = make_demo.delay(2, 2).id
+        logger.debug("jaja: tarea de demo lanzada task_id=%s", task_id)
+    except Exception:
+        logger.error("jaja: error lanzando tarea de demo", exc_info=True)
+        return HttpResponse("error", status=500)
     return HttpResponse("simon", status=200)
 
 @api_view(['GET'])
@@ -294,12 +354,20 @@ def confirm_new_category(request):
         target_id     = request.GET.get("target_id")
         min_sim       = float(request.GET.get("min_similarity", 0.8))
     except Exception as e:
+        logger.error(
+            "confirm_new_category: parámetros inválidos user_id=%s — %s",
+            request.user.pk, e,
+        )
         return Response(f"Error en los datos proporcionados {e}", status=400)
 
     user = request.user
     try:
         graph = Graphs.objects.get(id_user=user, id=graph_id)
     except Graphs.DoesNotExist:
+        logger.error(
+            "confirm_new_category: grafo no encontrado user_id=%s graph_id=%s",
+            user.pk, graph_id,
+        )
         return Response("Grafo no encontrado", status=400)
 
     if Nodes.objects.filter(node_name=name_category, graph=graph).exists():
@@ -308,6 +376,10 @@ def confirm_new_category(request):
     try:
         target_data = Data.objects.get(graph=graph, id_data=target_id)
     except Data.DoesNotExist:
+        logger.error(
+            "confirm_new_category: target_id no encontrado user_id=%s graph_id=%s target_id=%s",
+            user.pk, graph_id, target_id,
+        )
         return Response("ID de referencia no encontrado", status=400)
 
     max_dist = 1.0 - min_sim
@@ -323,6 +395,10 @@ def confirm_new_category(request):
     try:
         raw_df = read_parquet_s3_pl(f"{BASE_PATH_USER}/raw.parquet")
     except FileNotFoundError:
+        logger.error(
+            "confirm_new_category: raw.parquet no encontrado user_id=%s graph_id=%s category=%s",
+            user.pk, graph_id, name_category,
+        )
         return Response("Datos no encontrados", status=404)
 
     cat_df = raw_df.filter(pl.col(graph.id_column).cast(pl.Utf8).is_in(matching_ids))
@@ -353,12 +429,20 @@ def sample(request):
         page          = int(request.GET.get("page", 1))
         page_size     = int(request.GET.get("page_size", 10))
     except Exception as e:
+        logger.error(
+            "sample: parámetros inválidos user_id=%s — %s",
+            request.user.pk, e,
+        )
         return Response(f"Error en los datos proporcionados {e}", status=400)
 
     user = request.user
     try:
         graph = Graphs.objects.get(id_user=user, id=graph_id)
     except Graphs.DoesNotExist:
+        logger.error(
+            "sample: grafo no encontrado user_id=%s graph_id=%s",
+            user.pk, graph_id,
+        )
         return Response("Grafo no encontrado", status=400)
 
     BASE_PATH = f"{user.pk}/{graph_id}"
@@ -379,6 +463,10 @@ def sample(request):
         try:
             df = read_parquet_s3_pl(f"{BASE_PATH}/raw.parquet")
         except FileNotFoundError:
+            logger.error(
+                "sample: raw.parquet no encontrado user_id=%s graph_id=%s",
+                user.pk, graph_id,
+            )
             return Response("Datos no encontrados", status=404)
 
         df = df.filter(pl.col(graph.id_column).is_in(unblocked_ids))
@@ -398,6 +486,10 @@ def sample(request):
         try:
             df = read_parquet_s3_pl(f"{BASE_PATH}/{category}.parquet")
         except FileNotFoundError:
+            logger.error(
+                "sample: parquet de categoría no encontrado user_id=%s graph_id=%s category=%s",
+                user.pk, graph_id, category,
+            )
             return Response("Categoria invalida", status=400)
 
         size = df.height
@@ -411,6 +503,10 @@ def sample(request):
         try:
             df = read_parquet_s3_pl(f"{BASE_PATH}/currentReview.parquet")
         except FileNotFoundError:
+            logger.error(
+                "sample: currentReview.parquet no encontrado user_id=%s graph_id=%s",
+                user.pk, graph_id,
+            )
             return Response("No hay categoria actual en revisión", status=400)
 
         size = df.height
@@ -441,6 +537,10 @@ def calculate_sim_cos(request):
         target_id = request.GET.get('target_id')
         graph_id = request.GET.get('graph_id')
     except Exception as e:
+        logger.error(
+            "calculate_sim_cos: parámetros inválidos user_id=%s — %s",
+            request.user.pk, e,
+        )
         return Response(f"Formato de los datos erroneo {e}", status=400)
     min_cos = 0
     if not (target_id):
@@ -450,6 +550,10 @@ def calculate_sim_cos(request):
     try:
         graph = Graphs.objects.get(id_user=user, id=graph_id)
     except Graphs.DoesNotExist:
+        logger.error(
+            "calculate_sim_cos: grafo no encontrado user_id=%s graph_id=%s",
+            user.pk, graph_id,
+        )
         return Response("Grafo no encontrado", status=400)
     PATH_EMB = f"{user.pk}/{graph_id}/embedding.parquet"
     df_embedding: pd.DataFrame = read_tree_s3(PATH_EMB)
@@ -476,6 +580,10 @@ def opc_cut(request):
         target_id = request.GET.get('target_id')
         graph_id = request.GET.get('graph_id')
     except Exception as e:
+        logger.error(
+            "opc_cut: parámetros inválidos user_id=%s — %s",
+            request.user.pk, e,
+        )
         return Response(f"Formato de los datos erroneo {e}", status=400)
 
     if not (n_opc and min_cos and target_id):
@@ -485,6 +593,10 @@ def opc_cut(request):
     try:
         graph = Graphs.objects.get(id_user=user, id=graph_id)
     except Graphs.DoesNotExist:
+        logger.error(
+            "opc_cut: grafo no encontrado user_id=%s graph_id=%s",
+            user.pk, graph_id,
+        )
         return Response("Grafo no encontrado", status=400)
 
     list_cos = sorted(range_cos(min_cos, n_opc))
@@ -518,11 +630,19 @@ def get_categorized_data(request):
     try:
         graph = Graphs.objects.get(id_user=user, id=graph_id)
     except Graphs.DoesNotExist:
+        logger.error(
+            "get_categorized_data: grafo no encontrado user_id=%s graph_id=%s",
+            user.pk, graph_id,
+        )
         return Response("Grafo no encontrado", status=400)
 
     try:
         raw_df = read_parquet_s3_pl(f"{user.pk}/{graph_id}/raw.parquet")
     except FileNotFoundError:
+        logger.error(
+            "get_categorized_data: raw.parquet no encontrado user_id=%s graph_id=%s",
+            user.pk, graph_id,
+        )
         return Response("Datos no encontrados", status=404)
 
     # Obtener asignaciones id_data → categorías desde la DB
@@ -586,8 +706,16 @@ def get_full_graph(request):
         return Response({"nodes": nodes_list, "edges": edges_list})
 
     except Graphs.DoesNotExist:
+        logger.error(
+            "get_full_graph: grafo no encontrado user_id=%s graph_id=%s",
+            request.user.pk, graph_id,
+        )
         return Response("El grafo no existe o no pertenece al usuario", status=400)
     except Exception as e:
+        logger.error(
+            "get_full_graph: error inesperado user_id=%s graph_id=%s",
+            request.user.pk, graph_id, exc_info=True,
+        )
         return Response(f"Error inesperado: {e}", status=500)
 
 
@@ -607,17 +735,29 @@ def add_edge(request):
         try:
             graph_obj = Graphs.objects.get(id=graph_id, id_user=user)
         except Graphs.DoesNotExist:
+            logger.error(
+                "add_edge: grafo no encontrado user_id=%s graph_id=%s",
+                user.pk, graph_id,
+            )
             return Response("Grafo no encontrado o no pertenece al usuario", status=400)
 
         try:
             node1 = Nodes.objects.get(id=node_id_1, graph=graph_obj)
             node2 = Nodes.objects.get(id=node_id_2, graph=graph_obj)
         except Nodes.DoesNotExist:
+            logger.error(
+                "add_edge: nodo no encontrado user_id=%s graph_id=%s node_id_1=%s node_id_2=%s",
+                user.pk, graph_id, node_id_1, node_id_2,
+            )
             return Response("Uno o ambos nodos no encontrados en este grafo", status=400)
 
         try:
             rel_obj = Relationship.objects.get(id=connection_type)
         except Relationship.DoesNotExist:
+            logger.error(
+                "add_edge: relación no encontrada user_id=%s graph_id=%s connection_type=%s",
+                user.pk, graph_id, connection_type,
+            )
             return Response("Tipo de conexión (relación) no encontrado", status=400)
 
         edge_obj = Edge.objects.filter(from_node=node1, to_node=node2).first()
@@ -630,6 +770,10 @@ def add_edge(request):
         return Response("OK", status=200)
 
     except Exception as e:
+        logger.error(
+            "add_edge: error inesperado user_id=%s graph_id=%s",
+            request.user.pk, request.data.get("graph_id"), exc_info=True,
+        )
         return Response(f"Error inesperado: {e}", status=500)
 
 
@@ -637,11 +781,18 @@ def add_edge(request):
 def get_user_graphs(request):
     """Obtener todos los grafos del usuario autenticado."""
     user = request.user
-    user_Graphs = Graphs.objects.filter(id_user=user)
-    results = [
-        {"name": g.name if g.name else f"Grafo {g.id}", "id": g.id, "date": 0, "status": g.status, "task_id": g.task_id}
-        for g in user_Graphs
-    ]
+    try:
+        user_Graphs = Graphs.objects.filter(id_user=user)
+        results = [
+            {"name": g.name if g.name else f"Grafo {g.id}", "id": g.id, "date": 0, "status": g.status, "task_id": g.task_id}
+            for g in user_Graphs
+        ]
+    except Exception:
+        logger.error(
+            "get_user_graphs: error obteniendo grafos user_id=%s",
+            user.pk, exc_info=True,
+        )
+        return Response("Error obteniendo grafos", status=500)
     return Response(results)
 
 
@@ -684,8 +835,18 @@ def delete_node(request):
         return HttpResponse(status=204)
 
     except (Graphs.DoesNotExist, Nodes.DoesNotExist):
+        logger.error(
+            "delete_node: grafo o nodo no encontrado user_id=%s graph_id=%s node_id=%s",
+            request.user.pk, request.data.get("graph_id") or request.POST.get("graph_id"),
+            request.data.get("node_id") or request.POST.get("node_id"),
+        )
         return Response("Grafo o nodo no encontrado", status=400)
     except Exception as e:
+        logger.error(
+            "delete_node: error inesperado user_id=%s graph_id=%s node_id=%s",
+            request.user.pk, request.data.get("graph_id") or request.POST.get("graph_id"),
+            request.data.get("node_id") or request.POST.get("node_id"), exc_info=True,
+        )
         return Response(f"Error inesperado: {e}", status=500)
 
 
@@ -701,6 +862,10 @@ def create_relationship(request):
         stroke_width = int(request.data.get('stroke_width', 2))
         is_global    = int(request.data.get('is_global', 0))
     except Exception as e:
+        logger.error(
+            "create_relationship: parámetros inválidos user_id=%s — %s",
+            request.user.pk, e,
+        )
         return Response(f"Error en los datos: {e}", status=400)
 
     if not label:
@@ -717,6 +882,10 @@ def create_relationship(request):
         try:
             graph_obj = Graphs.objects.get(id=graph_id, id_user=user)
         except Graphs.DoesNotExist:
+            logger.error(
+                "create_relationship: grafo no encontrado user_id=%s graph_id=%s",
+                user.pk, graph_id,
+            )
             return Response("Grafo no encontrado o no pertenece al usuario", status=400)
 
     rel = Relationship.objects.create(
@@ -742,6 +911,10 @@ def get_relations(request):
     try:
         graph_obj = Graphs.objects.get(id=graph_id, id_user=user)
     except Graphs.DoesNotExist:
+        logger.error(
+            "get_relations: grafo no encontrado user_id=%s graph_id=%s",
+            user.pk, graph_id,
+        )
         return Response("Grafo no encontrado", status=400)
 
     from django.db.models import Q as DQ
@@ -773,6 +946,10 @@ def get_progress(request):
     try:
         graph = Graphs.objects.get(id_user=user, id=graph_id)
     except Graphs.DoesNotExist:
+        logger.error(
+            "get_progress: grafo no encontrado user_id=%s graph_id=%s",
+            user.pk, graph_id,
+        )
         return Response("Grafo no encontrado", status=400)
 
     total = Data.objects.filter(graph=graph).count()
@@ -791,6 +968,10 @@ def rename_category(request):
         node_id  = request.data.get('node_id')
         new_name = (request.data.get('new_name') or '').strip()
     except Exception as e:
+        logger.error(
+            "rename_category: parámetros inválidos user_id=%s — %s",
+            request.user.pk, e,
+        )
         return Response(f"Error en los datos: {e}", status=400)
 
     if not all([graph_id, node_id]):
@@ -804,11 +985,19 @@ def rename_category(request):
     try:
         graph = Graphs.objects.get(id=graph_id, id_user=user)
     except Graphs.DoesNotExist:
+        logger.error(
+            "rename_category: grafo no encontrado user_id=%s graph_id=%s",
+            user.pk, graph_id,
+        )
         return Response("Grafo no encontrado o no pertenece al usuario", status=400)
 
     try:
         node =Nodes.objects.get(id=node_id, graph=graph)
     except Nodes.DoesNotExist:
+        logger.error(
+            "rename_category: nodo no encontrado user_id=%s graph_id=%s node_id=%s",
+            user.pk, graph_id, node_id,
+        )
         return Response("Nodo no encontrado en este grafo", status=400)
 
     old_name = node.node_name
@@ -836,6 +1025,10 @@ def rename_category(request):
             s3_copy_done = True
             delete_parquet_s3(old_s3_path)
     except Exception as e:
+        logger.error(
+            "rename_category: error moviendo parquet en S3 user_id=%s graph_id=%s node_id=%s old=%s new=%s",
+            user.pk, graph_id, node_id, old_name, new_name, exc_info=True,
+        )
         # Revertir copia parcial si la copia llegó a completarse antes del delete
         if s3_copy_done:
             try:
@@ -849,6 +1042,10 @@ def rename_category(request):
         node.node_name = new_name
         node.save(update_fields=['node_name'])
     except Exception as e:
+        logger.error(
+            "rename_category: error actualizando BD user_id=%s graph_id=%s node_id=%s old=%s new=%s",
+            user.pk, graph_id, node_id, old_name, new_name, exc_info=True,
+        )
         # Revertir S3: restaurar archivo original y borrar el nuevo
         if parquet_existed:
             try:
@@ -856,8 +1053,11 @@ def rename_category(request):
                 save_or_update_tree_s3(old_s3_path, df_category)
                 delete_parquet_s3(new_s3_path)
             except Exception as revert_err:
-                print(f"CRITICAL: fallo al revertir S3 tras error en BD. "
-                      f"Parquet nuevo='{new_s3_path}' sin actualizar en BD. Revert error: {revert_err}")
+                logger.critical(
+                    "rename_category: FALLO AL REVERTIR S3 tras error en BD — "
+                    "parquet nuevo='%s' permanece en S3 sin actualizar en BD. revert_error=%s",
+                    new_s3_path, revert_err,
+                )
         return Response(f"Error al actualizar la base de datos: {e}", status=500)
 
     return Response({"old_name": old_name, "new_name": new_name}, status=200)
@@ -872,17 +1072,29 @@ def update_node_position(request):
         pos_x    = float(request.data.get('pos_x'))
         pos_y    = float(request.data.get('pos_y'))
     except (TypeError, ValueError) as e:
+        logger.error(
+            "update_node_position: parámetros inválidos user_id=%s graph_id=%s node_id=%s — %s",
+            request.user.pk, request.data.get('graph_id'), request.data.get('node_id'), e,
+        )
         return Response(f"Datos inválidos: {e}", status=400)
 
     user = request.user
     try:
         graph_obj = Graphs.objects.get(id=graph_id, id_user=user)
     except Graphs.DoesNotExist:
+        logger.error(
+            "update_node_position: grafo no encontrado user_id=%s graph_id=%s",
+            user.pk, graph_id,
+        )
         return Response("Grafo no encontrado", status=400)
 
     try:
         node_obj = Nodes.objects.get(id=node_id, graph=graph_obj)
     except Nodes.DoesNotExist:
+        logger.error(
+            "update_node_position: nodo no encontrado user_id=%s graph_id=%s node_id=%s",
+            user.pk, graph_id, node_id,
+        )
         return Response("Nodo no encontrado en este grafo", status=400)
 
     node_obj.pos_x = pos_x
@@ -902,14 +1114,21 @@ def delete_graph(request):
     try:
         graph = Graphs.objects.get(id=graph_id, id_user=user)
     except Graphs.DoesNotExist:
+        logger.error(
+            "delete_graph: grafo no encontrado user_id=%s graph_id=%s",
+            user.pk, graph_id,
+        )
         return Response("Grafo no encontrado o no pertenece al usuario", status=400)
 
     s3_path = f"{BUCKET}/{user.pk}/{graph_id}"
     try:
         if fs.exists(s3_path):
             fs.rm(s3_path, recursive=True)
-    except Exception as e:
-        print(f"Warning: error eliminando S3 path {s3_path}: {e}")
+    except Exception:
+        logger.warning(
+            "delete_graph: error eliminando S3 path=%s user_id=%s graph_id=%s",
+            s3_path, user.pk, graph_id, exc_info=True,
+        )
 
     graph.delete()  # cascade elimina nodos → aristas
     return HttpResponse(status=204)
@@ -943,6 +1162,19 @@ def delete_edge(request):
         return HttpResponse(status=204)
 
     except (Graphs.DoesNotExist, Nodes.DoesNotExist, Edge.DoesNotExist):
+        logger.error(
+            "delete_edge: grafo, nodo o arista no encontrado user_id=%s graph_id=%s from=%s to=%s",
+            request.user.pk,
+            request.data.get("graph_id") or request.POST.get("graph_id"),
+            request.data.get("from_node_id") or request.POST.get("from_node_id"),
+            request.data.get("to_node_id") or request.POST.get("to_node_id"),
+        )
         return Response("Grafo, nodo o arista no encontrado", status=400)
     except Exception as e:
+        logger.error(
+            "delete_edge: error inesperado user_id=%s graph_id=%s",
+            request.user.pk,
+            request.data.get("graph_id") or request.POST.get("graph_id"),
+            exc_info=True,
+        )
         return Response(f"Error inesperado: {e}", status=500)
