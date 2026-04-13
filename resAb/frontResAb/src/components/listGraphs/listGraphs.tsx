@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import Papa from 'papaparse'
 import { ROUTES } from '../../routes.ts'
 import { useAuth } from '../../auth/AuthContext.tsx'
 import './listGraphs.css'
@@ -37,7 +38,8 @@ const UploadCSV = ({ onGraphCreated }: UploadCSVProps) => {
         reader.onload = (event) => {
             const csvData = event.target?.result as string;
             setCsvFile(file);
-            const headers = csvData.split('\n')[0].split(',').map(h => h.trim());
+            const result = Papa.parse<string[]>(csvData, { preview: 1 });
+            const headers = result.data[0] ?? [];
             setColumns(headers);
             setColumnsSelected(headers[0]);
         };
