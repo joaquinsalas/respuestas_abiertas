@@ -75,11 +75,16 @@ function Pagination({
 }) {
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const [inputVal, setInputVal] = useState<number | string>(page);
+    useEffect(() => {
+        setInputVal(page);
+    }, [page]);
     return (
         <div className="pagination">
-            <button onClick={() => setPage((p: number) => {
-                setInputVal( Math.max(1, p - 1));
-                return Math.max(1, p - 1);})} disabled={page === 1}>&lt;</button>
+            <button onClick={() => {
+                const next = Math.max(1, page - 1);
+                setInputVal(next);
+                setPage(next);
+            }} disabled={page === 1}>&lt;</button>
             <div className="pagination-info">
                 <input
                     type="text"
@@ -94,10 +99,10 @@ function Pagination({
                 />
                 <span>/ {totalPages}</span>
             </div>
-            <button onClick={() => {setPage((p: number) => {
-                setInputVal(Math.min(totalPages, p + 1));
-
-                return Math.min(totalPages, p + 1)});
+            <button onClick={() => {
+                const next = Math.min(totalPages, page + 1);
+                setInputVal(next);
+                setPage(next);
             }} disabled={page === totalPages}>&gt;</button>
         </div>
     );
@@ -132,14 +137,13 @@ function DisplaySample({
     const [typeSample] = useState(initialTypeSample);
     const [category] = useState(categoryProp);
     const [page, setPage] = useState(1);
-    const [sampleSize] = useState(5);// Estos 2 deberian ser uno
-    const [pageSize] = useState(5); // Estos 2 deberían ser uno
+    const [itemsPerPage, setItemsPerPage] = useState(5);
     const [totalItems, setTotalItems] = useState(0);
     const [query, setQuery] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
-            const url = `${ROUTES.sample}?graph_id=${graph_id}&sample=${typeSample}&random=${random}&ss=${sampleSize}&page=${page}&page_size=${pageSize}&category=${category}`;
+            const url = `${ROUTES.sample}?graph_id=${graph_id}&sample=${typeSample}&random=${random}&ss=${itemsPerPage}&page=${page}&page_size=${itemsPerPage}&category=${category}`;
             try {
                 const response = await authFetch(url);
                 if (!response.ok) throw new Error(`HTTP error ${response.status}`);
@@ -154,7 +158,7 @@ function DisplaySample({
             }
         };
         fetchData();
-    }, [random, typeSample, sampleSize, category, page, pageSize, graph_id, query, refreshTrigger]);
+    }, [random, typeSample, itemsPerPage, category, page, graph_id, query, refreshTrigger]);
 
     const readOnly = typeSample === 1 || typeSample === 2;
 
@@ -170,6 +174,19 @@ function DisplaySample({
                     <button className={random === 1 ? 'active' : ''} onClick={() => setRandom(1)}>Aleatoria</button>
                     <button className={random === 0 ? 'active' : ''} onClick={() => setRandom(0)}>Orden</button>
                 </div>
+                <select
+                    className="btn-ghost"
+                    style={{ fontSize: 'var(--font-size-xs)' }}
+                    value={itemsPerPage}
+                    onChange={e => {
+                        setPage(1);
+                        setItemsPerPage(Number(e.target.value));
+                    }}
+                >
+                    {[5, 10, 20, 50].map(n => (
+                        <option key={n} value={n}>{n} por página</option>
+                    ))}
+                </select>
                 {random === 1 && (
                     <button className="btn-ghost" style={{ fontSize: 'var(--font-size-xs)', marginLeft: 'auto' }} onClick={() => setQuery(q => !q)}>
                         ↻ Otros
@@ -180,7 +197,7 @@ function DisplaySample({
             <div className="sample-footer">
                 <span className="sample-count">{totalItems} respuestas</span>
                 {random === 0 && (
-                    <Pagination page={page} pageSize={sampleSize} totalItems={totalItems} setPage={setPage} />
+                    <Pagination page={page} pageSize={itemsPerPage} totalItems={totalItems} setPage={setPage} />
                 )}
                 {typeSample===2 &&
                 (<button className="btn-ghost" style={{ fontSize: 'var(--font-size-xs)' }} onClick={() => setComponent(1)}>
