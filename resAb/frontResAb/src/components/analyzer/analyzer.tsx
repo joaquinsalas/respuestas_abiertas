@@ -238,13 +238,14 @@ function ReviewManager({ graph_id, target, setComponent, setReviewParams }: any)
     const [searchResults, setSearchResults] = useState<Data[]>([]);
     const [totalItems, setTotalItems] = useState(0);
     const [page, setPage] = useState(1);
-    const PAGE_SIZE = 10;
+    const [pageSize, setPageSize] = useState(10);
+    const [inputValue, setInputValue] = useState('10');
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const fetchResults = useCallback(async (sim: number, p: number) => {
+    const fetchResults = useCallback(async (sim: number, p: number, ps: number = pageSize) => {
         setLoading(true);
         setShowSample(false);
-        const url = `${ROUTES.get_similarity}?graph_id=${graph_id}&target_id=${target.id}&min_similarity=${sim}&page=${p}&page_size=${PAGE_SIZE}`;
+        const url = `${ROUTES.get_similarity}?graph_id=${graph_id}&target_id=${target.id}&min_similarity=${sim}&page=${p}&page_size=${ps}`;
         try {
             const res = await authFetch(url);
             if (res.ok) {
@@ -258,7 +259,18 @@ function ReviewManager({ graph_id, target, setComponent, setReviewParams }: any)
         } finally {
             setLoading(false);
         }
-    }, [graph_id, target.id]);
+    }, [graph_id, target.id, pageSize]);
+
+    const commitPageSize = (raw: string) => {
+        const ps = parseInt(raw, 10);
+        if (!isNaN(ps) && ps > 0) {
+            setPageSize(ps);
+            setPage(1);
+            fetchResults(similarity, 1, ps);
+        } else {
+            setInputValue(String(pageSize));
+        }
+    };
 
     const handleSimilarityChange = (newSim: number) => {
         setSimilarity(newSim);
@@ -323,9 +335,19 @@ function ReviewManager({ graph_id, target, setComponent, setReviewParams }: any)
                                 <DisplayData data={searchResults} setTarget={() => {}} setComponent={() => {}} readOnly={true} />
                                 <div className="sample-footer">
                                     <span className="sample-count">{totalItems} resultados</span>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        value={inputValue}
+                                        className="btn-ghost"
+                                        style={{ fontSize: 'var(--font-size-xs)', width: '4rem', textAlign: 'center' }}
+                                        onChange={e => setInputValue(e.target.value)}
+                                        onBlur={e => commitPageSize(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') commitPageSize((e.target as HTMLInputElement).value); }}
+                                    />
                                     <Pagination
                                         page={page}
-                                        pageSize={PAGE_SIZE}
+                                        pageSize={pageSize}
                                         totalItems={totalItems}
                                         setPage={(p: number) => {
                                             setPage(p);
