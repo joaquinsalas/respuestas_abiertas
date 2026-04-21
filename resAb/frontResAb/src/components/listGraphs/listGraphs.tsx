@@ -29,6 +29,7 @@ const UploadCSV = ({ onGraphCreated }: UploadCSVProps) => {
     const [nameAnalysis, setNameAnalysis] = useState('');
     const [loading, setLoading] = useState(false);
     const [fileName, setFileName] = useState('');
+    const [uploadError, setUploadError] = useState('');
 
     const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -50,6 +51,7 @@ const UploadCSV = ({ onGraphCreated }: UploadCSVProps) => {
         e.preventDefault();
         if (!csvFile || !nameAnalysis) return;
         setLoading(true);
+        setUploadError('');
         try {
             const formData = new FormData();
             formData.append('file', csvFile);
@@ -72,7 +74,12 @@ const UploadCSV = ({ onGraphCreated }: UploadCSVProps) => {
                     status: 'pending',
                     task_id: data.task_id,
                 });
+            } else {
+                const msg = await response.text().catch(() => '');
+                setUploadError(msg.slice(0, 300) || 'Error al crear el análisis. Intenta de nuevo.');
             }
+        } catch {
+            setUploadError('Error de red. Verifica tu conexión e intenta de nuevo.');
         } finally {
             setLoading(false);
         }
@@ -138,6 +145,11 @@ const UploadCSV = ({ onGraphCreated }: UploadCSVProps) => {
                     <label htmlFor="column-index-checkbox">Usar esta columna como índice</label>
                 </div>
 */}
+                {uploadError && (
+                    <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.85rem', margin: '0 0 var(--space-2)' }}>
+                        {uploadError}
+                    </p>
+                )}
                 <div className="dialog-footer">
                     <button
                         className="btn-ghost"
@@ -167,6 +179,8 @@ export const ListGraphs = ({ setPage, setGraph }: ListGraphsProps) => {
     const { authFetch } = useAuth();
     const [graphs, setGraphs] = useState<Graph[]>([]);
     const [deletingId, setDeletingId] = useState<string | number | null>(null);
+    const [loadError, setLoadError] = useState('');
+    const [deleteError, setDeleteError] = useState('');
 
     // Ref siempre actualizado para evitar stale closure en el interval de polling
     const graphsRef = useRef<Graph[]>(graphs);
@@ -178,10 +192,11 @@ export const ListGraphs = ({ setPage, setGraph }: ListGraphsProps) => {
         const getGraphs = async () => {
             try {
                 const response = await authFetch(ROUTES.get_graphs);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
                 setGraphs(data);
-            } catch (e) {
-                console.error('Error loading graphs', e);
+            } catch {
+                setLoadError('No se pudieron cargar los análisis. Recarga la página.');
             }
         };
         getGraphs();
@@ -227,13 +242,21 @@ export const ListGraphs = ({ setPage, setGraph }: ListGraphsProps) => {
     const handleDelete = async (e: React.MouseEvent, id: string | number) => {
         e.stopPropagation();
         setDeletingId(id);
+        setDeleteError('');
         try {
-            await authFetch(ROUTES.delete_graph, {
+            const res = await authFetch(ROUTES.delete_graph, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ graph_id: id }),
             });
-            setGraphs(prev => prev.filter(g => g.id !== id));
+            if (res.ok) {
+                setGraphs(prev => prev.filter(g => g.id !== id));
+            } else {
+                const msg = await res.text().catch(() => '');
+                setDeleteError(msg.slice(0, 200) || 'No se pudo eliminar el análisis.');
+            }
+        } catch {
+            setDeleteError('Error de red al eliminar. Intenta de nuevo.');
         } finally {
             setDeletingId(null);
         }
@@ -256,8 +279,19 @@ export const ListGraphs = ({ setPage, setGraph }: ListGraphsProps) => {
                 </button>
             </div>
 
+            {deleteError && (
+                <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.85rem', margin: '0 0 var(--space-2)' }}>
+                    {deleteError}
+                </p>
+            )}
+
             <div className="graph-grid">
-                {graphs.length === 0 ? (
+                {loadError ? (
+                    <div className="graph-grid-empty">
+                        <div className="graph-grid-empty-icon">⚠</div>
+                        <p>{loadError}</p>
+                    </div>
+                ) : graphs.length === 0 ? (
                     <div className="graph-grid-empty">
                         <div className="graph-grid-empty-icon">📂</div>
                         <p>No tienes análisis aún. ¡Crea el primero!</p>

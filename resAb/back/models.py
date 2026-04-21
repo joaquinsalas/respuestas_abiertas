@@ -4,7 +4,7 @@ from pgvector.django import VectorField
 
 # Create your models here.
 class Users(models.Model):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, unique=True)
     password = models.CharField(max_length=255)
 
     @property

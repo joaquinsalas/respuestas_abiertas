@@ -140,21 +140,22 @@ function DisplaySample({
     const [itemsPerPage, setItemsPerPage] = useState(5);
     const [totalItems, setTotalItems] = useState(0);
     const [query, setQuery] = useState(false);
+    const [sampleError, setSampleError] = useState('');
 
     useEffect(() => {
         const fetchData = async () => {
+            setSampleError('');
             const url = `${ROUTES.sample}?graph_id=${graph_id}&sample=${typeSample}&random=${random}&ss=${itemsPerPage}&page=${page}&page_size=${itemsPerPage}&category=${category}`;
             try {
                 const response = await authFetch(url);
-                if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const json = await response.json();
                 setSampleData(json.data);
-                console.log(json.data);
                 setTotalItems(json.total_items ?? json.data.length);
-            } catch (err) {
-                console.error('Error fetching sample:', err);
+            } catch {
                 setSampleData([]);
                 setTotalItems(0);
+                setSampleError('No se pudieron cargar los datos. Intenta de nuevo.');
             }
         };
         fetchData();
@@ -168,6 +169,11 @@ function DisplaySample({
                 <div className="sample-header">
                     <h1>Selecciona un dato</h1>
                 </div>
+            )}
+            {sampleError && (
+                <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.85rem', padding: 'var(--space-2)' }}>
+                    {sampleError}
+                </p>
             )}
             <div className="sample-controls">
                 <div className="sample-type-toggle">
@@ -240,11 +246,13 @@ function ReviewManager({ graph_id, target, setComponent, setReviewParams }: any)
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [inputValue, setInputValue] = useState('10');
+    const [similarityError, setSimilarityError] = useState('');
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const fetchResults = useCallback(async (sim: number, p: number, ps: number = pageSize) => {
         setLoading(true);
         setShowSample(false);
+        setSimilarityError('');
         const url = `${ROUTES.get_similarity}?graph_id=${graph_id}&target_id=${target.id}&min_similarity=${sim}&page=${p}&page_size=${ps}`;
         try {
             const res = await authFetch(url);
@@ -253,9 +261,12 @@ function ReviewManager({ graph_id, target, setComponent, setReviewParams }: any)
                 setSearchResults(json.data);
                 setTotalItems(json.total_items);
                 setShowSample(true);
+            } else {
+                const msg = await res.text().catch(() => '');
+                setSimilarityError(msg.slice(0, 200) || 'Error al buscar respuestas similares.');
             }
-        } catch (e) {
-            console.error('Similarity error:', e);
+        } catch {
+            setSimilarityError('Error de red. Verifica tu conexión.');
         } finally {
             setLoading(false);
         }
@@ -328,6 +339,11 @@ function ReviewManager({ graph_id, target, setComponent, setReviewParams }: any)
                         <div className="review-target-text">{target.data}</div>
                     </div>
                     <div className="review-results">
+                        {similarityError && (
+                            <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.85rem', padding: 'var(--space-2)' }}>
+                                {similarityError}
+                            </p>
+                        )}
                         {loading ? (
                             <div className="loader-container"><div className="loader" /></div>
                         ) : showSample ? (
@@ -391,17 +407,26 @@ export function ConfirmCategory({ graph_id, setComponent, setExec, exec, targetI
     const { authFetch } = useAuth();
     const [categoryName, setCategoryName] = useState('');
     const [blockResponses, setBlockResponses] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [confirmError, setConfirmError] = useState('');
 
     const handleConfirm = async () => {
+        setLoading(true);
+        setConfirmError('');
         const url = `${ROUTES.new_category}?graph_id=${graph_id}&name=${categoryName}&target_id=${targetId}&min_similarity=${minSimilarity}${blockResponses ? '&block=1' : ''}`;
         try {
             const res = await authFetch(url);
             if (res.ok) {
                 setExec(!exec);
                 setComponent(1);
+            } else {
+                const msg = await res.text().catch(() => '');
+                setConfirmError(msg.slice(0, 200) || 'No se pudo crear la categoría. Intenta de nuevo.');
             }
-        } catch (e) {
-            console.error('Error confirming category:', e);
+        } catch {
+            setConfirmError('Error de red. Verifica tu conexión.');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -427,14 +452,19 @@ export function ConfirmCategory({ graph_id, setComponent, setExec, exec, targetI
                 />
                 ¿Desea restringir estas respuestas de futuras categorías?
             </label>
+            {confirmError && (
+                <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.85rem', margin: 'var(--space-2) 0 0' }}>
+                    {confirmError}
+                </p>
+            )}
             <div className="confirm-category-actions">
                 <button className="btn-ghost" onClick={() => setComponent(2)}>← Atrás</button>
                 <button
                     className="btn-primary"
                     onClick={handleConfirm}
-                    disabled={!categoryName.trim()}
+                    disabled={!categoryName.trim() || loading}
                 >
-                    Confirmar
+                    {loading ? 'Guardando…' : 'Confirmar'}
                 </button>
             </div>
         </div>
@@ -635,10 +665,12 @@ function NewRelationModal({ graph_id, onClose, onCreated }: {
     const [strokeWidth, setStrokeWidth]   = useState(2);
     const [isGlobal, setIsGlobal]         = useState(false);
     const [saving, setSaving]             = useState(false);
+    const [relationError, setRelationError] = useState('');
 
     const handleSave = async () => {
         if (!label.trim()) return;
         setSaving(true);
+        setRelationError('');
         try {
             const res = await authFetch(ROUTES.create_relationship, {
                 method: 'POST',
@@ -661,7 +693,12 @@ function NewRelationModal({ graph_id, onClose, onCreated }: {
                     stroke_width: strokeWidth, is_global: isGlobal ? 1 : 0,
                 });
                 onClose();
+            } else {
+                const msg = await res.text().catch(() => '');
+                setRelationError(msg.slice(0, 200) || 'No se pudo guardar la relación.');
             }
+        } catch {
+            setRelationError('Error de red. Verifica tu conexión.');
         } finally { setSaving(false); }
     };
 
@@ -754,6 +791,11 @@ function NewRelationModal({ graph_id, onClose, onCreated }: {
                     Disponible en todos mis grafos (global)
                 </label>
 
+                {relationError && (
+                    <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.85rem', margin: 'var(--space-2) 0 0' }}>
+                        {relationError}
+                    </p>
+                )}
                 <div className="modal-actions">
                     <button className="btn-ghost" onClick={onClose}>Cancelar</button>
                     <button className="btn-primary" onClick={handleSave}
@@ -819,6 +861,8 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted, onCaptureReady }:
     const [showData, setShowData] = useState(false);
     const [category, setCategory] = useState('');
     const [progress, setProgress] = useState<number | null>(null);
+    const [graphError, setGraphError] = useState('');
+    const [connectError, setConnectError] = useState('');
     const ref = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -861,6 +905,7 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted, onCaptureReady }:
 
     const onConnect = useCallback(async (params: Connection) => {
         if (!params.source || !params.target || !selectedRelation) return;
+        setConnectError('');
         const body = {
             graph_id: graph_id.toString(),
             node_id_1: parseInt(params.source),
@@ -886,12 +931,16 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted, onCaptureReady }:
                     };
                     return addEdge(newEdge, filtered);
                 });
+            } else {
+                const msg = await res.text().catch(() => '');
+                setConnectError(msg.slice(0, 200) || 'No se pudo crear la conexión.');
             }
-        } catch (e) { console.error('Add edge error:', e); }
+        } catch { setConnectError('Error de red al crear la conexión.'); }
     }, [graph_id, selectedRelation, authFetch]);
 
     useEffect(() => {
         const fetchGraph = async () => {
+            setGraphError('');
             try {
                 const res = await authFetch(`${ROUTES.get_graph}?graph_id=${graph_id}`);
                 if (!res.ok) throw new Error('Error loading graph');
@@ -924,7 +973,7 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted, onCaptureReady }:
                         return saveNodePosition(n.id.toString(), (i % 5) * 200, Math.floor(i / 5) * 120);
                     }));
                 }
-            } catch (e) { console.error(e); }
+            } catch { setGraphError('No se pudo cargar el grafo. Intenta recargar la página.'); }
         };
         fetchGraph();
     }, [graph_id, exec, nodeDeleted, edgeDeleted]);
@@ -989,6 +1038,17 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted, onCaptureReady }:
                     </div>
                 )}
             </div>
+
+            {graphError && (
+                <div style={{ padding: 'var(--space-2) var(--space-4)', color: 'var(--color-danger, #ef4444)', fontSize: '0.85rem', background: 'var(--color-surface)' }}>
+                    {graphError}
+                </div>
+            )}
+            {connectError && (
+                <div style={{ padding: 'var(--space-2) var(--space-4)', color: 'var(--color-danger, #ef4444)', fontSize: '0.85rem', background: 'var(--color-surface)' }}>
+                    {connectError}
+                </div>
+            )}
 
             {/* ReactFlow canvas */}
             <div style={{ flex: 1, position: 'relative' }}>
@@ -1095,16 +1155,25 @@ export function Analyzer({ graph, setPage }: any) {
 
     const handleExport = () => {
         const download = async () => {
-            const res = await authFetch(`${ROUTES.dowload_csv}?graph_id=${graph}`);
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'resultado.csv';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            try {
+                const res = await authFetch(`${ROUTES.dowload_csv}?graph_id=${graph}`);
+                if (!res.ok) {
+                    const msg = await res.text().catch(() => '');
+                    alert(msg.slice(0, 200) || 'Error al exportar el CSV. Intenta de nuevo.');
+                    return;
+                }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'resultado.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch {
+                alert('Error de red al exportar el CSV. Verifica tu conexión.');
+            }
         };
         download();
     };
