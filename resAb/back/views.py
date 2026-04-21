@@ -1,4 +1,7 @@
+import codecs
+import io
 import logging
+import tempfile
 import pandas as pd
 from django.http import HttpResponse
 import s3fs, os, random
@@ -15,6 +18,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from .task import process_graph
 from pgvector.django import CosineDistance
+from charset_normalizer import from_bytes
 
 from django.views.decorators.csrf import csrf_exempt
 
@@ -132,6 +136,56 @@ def save_row(row, id_column, graph : Graphs):
     a.save()
 
 # ---------------------------------------------------------------------------
+# Encoding helpers
+# ---------------------------------------------------------------------------
+_UTF8_ALIASES = {'utf-8', 'utf_8', 'utf8', 'ascii', 'us-ascii'}
+_SAMPLE_SIZE   = 32 * 1024        # 32 KB — sufficient for reliable detection
+_CHUNK_SIZE    = 64 * 1024        # 64 KB read/write chunks
+_MEM_THRESHOLD = 50 * 1024 * 1024 # 50 MB — above this use a temp file
+
+def normalize_csv_encoding(file):
+    """Return a UTF-8 byte stream for *file*, converting if necessary.
+
+    Reads a sample for encoding detection, then either returns the original
+    file object unchanged (UTF-8 / ASCII) or streams a re-encoded copy to
+    avoid loading the whole file into memory.
+    """
+    sample = file.read(_SAMPLE_SIZE)
+    file.seek(0)
+
+    match = from_bytes(sample).best()
+    if match is None:
+        return file
+
+    detected = str(match.encoding).lower().replace('-', '_')
+    if detected in _UTF8_ALIASES:
+        return file
+
+    logger.info("normalize_csv_encoding: detected encoding=%s, converting to UTF-8", detected)
+
+    file.seek(0, 2)
+    size = file.tell()
+    file.seek(0)
+
+    dest = (
+        io.BytesIO()
+        if size <= _MEM_THRESHOLD
+        else tempfile.SpooledTemporaryFile(max_size=_MEM_THRESHOLD)
+    )
+
+    decoder = codecs.getincrementaldecoder(detected)(errors='replace')
+    while True:
+        chunk = file.read(_CHUNK_SIZE)
+        if not chunk:
+            dest.write(decoder.decode(b'', final=True).encode('utf-8'))
+            break
+        dest.write(decoder.decode(chunk).encode('utf-8'))
+
+    dest.seek(0)
+    return dest
+
+
+# ---------------------------------------------------------------------------
 # Analysis
 # ---------------------------------------------------------------------------
 @api_view(['POST'])
@@ -148,13 +202,14 @@ def new_analysis_request(request):
         return Response("Formato de archivo no permitido", status=400)
 
     try:
-        data = pl.read_csv(file)
-    except Exception:
+        normalized = normalize_csv_encoding(file)
+        data = pl.read_csv(normalized, null_values=["NA", "N/A", "n/a", ""], infer_schema_length=10000)
+    except Exception as e:
         logger.error(
             "new_analysis_request: CSV inválido user_id=%s filename=%s",
             request.user.pk, file.name, exc_info=True,
         )
-        return Response("CSV inválido o corrupto", status=400)
+        return Response(f"CSV inválido o corrupto {e}", status=400)
 
     if text_column not in data.columns:
         return Response(f"Columna '{text_column}' no existe en el CSV", status=400)
