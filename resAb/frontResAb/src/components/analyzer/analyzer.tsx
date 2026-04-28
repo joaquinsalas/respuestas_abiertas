@@ -176,9 +176,10 @@ function DisplaySample({
                 </p>
             )}
             <div className="sample-controls">
-                <div className="sample-type-toggle">
-                    <button className={random === 1 ? 'active' : ''} onClick={() => setRandom(1)}>Aleatoria</button>
-                    <button className={random === 0 ? 'active' : ''} onClick={() => setRandom(0)}>Orden</button>
+                <div className="sample-type-toggle" onClick={() => setRandom(r => r === 1 ? 0 : 1)}>
+                    <div className="sample-type-thumb" style={{ left: random === 1 ? '2px' : '50%' }} />
+                    <span className={random === 1 ? 'active' : ''}>Aleatoria</span>
+                    <span className={random === 0 ? 'active' : ''}>Orden</span>
                 </div>
                 <select
                     className="btn-ghost"
