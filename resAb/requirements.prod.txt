@@ -30,3 +30,5 @@ scikit-learn==1.8.0
 # Utils
 python-dotenv==1.2.1
 uvloop==0.22.1
+
+charset-normalizer==3.4.7
