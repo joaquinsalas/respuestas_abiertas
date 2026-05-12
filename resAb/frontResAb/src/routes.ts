@@ -23,4 +23,5 @@ export const ROUTES = {
     analysis_status: `${BASE}/analysis_status`,
     get_graph_nodes: `${BASE}/get_graph_nodes`,
     move_data: `${BASE}/move_data`,
+    remove_from_category: `${BASE}/remove_from_category`,
 }

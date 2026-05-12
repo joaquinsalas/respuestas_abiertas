@@ -116,9 +116,10 @@ function Pagination({
 
 /* ─── Item Context Menu ──────────────────────────────────────────────────────── */
 
-function ItemContextMenu({ x, y, onMove, onClose }: {
+function ItemContextMenu({ x, y, onMove, onExclude, onClose }: {
     x: number; y: number;
     onMove: () => void;
+    onExclude: () => void;
     onClose: () => void;
 }) {
     useEffect(() => {
@@ -133,6 +134,7 @@ function ItemContextMenu({ x, y, onMove, onClose }: {
     return (
         <div id="item-context-menu" className="item-context-menu" style={{ top: y, left: x }}>
             <button onClick={() => { onMove(); onClose(); }}>Mover a otra categoría</button>
+            <button className="btn-danger" onClick={() => { onExclude(); onClose(); }}>Excluir de categoría</button>
         </div>
     );
 }
@@ -276,6 +278,27 @@ function DisplaySample({
     const [localRefresh, setLocalRefresh] = useState(false);
     const [itemMenu, setItemMenu] = useState<{ item: Data; x: number; y: number } | null>(null);
     const [moveModal, setMoveModal] = useState<Data | null>(null);
+    const [excludeError, setExcludeError] = useState('');
+
+    const handleExclude = async (item: Data) => {
+        if (!nodeId) return;
+        setExcludeError('');
+        try {
+            const res = await authFetch(ROUTES.remove_from_category, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ graph_id, data_id: item.id, node_id: parseInt(nodeId) }),
+            });
+            if (res.ok) {
+                setLocalRefresh(r => !r);
+            } else {
+                const msg = await res.text().catch(() => '');
+                setExcludeError(msg.slice(0, 200) || 'No se pudo excluir el dato.');
+            }
+        } catch {
+            setExcludeError('Error de red. Verifica tu conexión.');
+        }
+    };
 
     useEffect(() => {
         const fetchData = async () => {
@@ -308,6 +331,11 @@ function DisplaySample({
             {sampleError && (
                 <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.85rem', padding: 'var(--space-2)' }}>
                     {sampleError}
+                </p>
+            )}
+            {excludeError && (
+                <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.85rem', padding: 'var(--space-2)' }}>
+                    {excludeError}
                 </p>
             )}
             <div className="sample-controls">
@@ -373,6 +401,7 @@ function DisplaySample({
                         x={itemMenu.x}
                         y={itemMenu.y}
                         onMove={() => setMoveModal(itemMenu.item)}
+                        onExclude={() => handleExclude(itemMenu.item)}
                         onClose={() => setItemMenu(null)}
                     />
                 )}

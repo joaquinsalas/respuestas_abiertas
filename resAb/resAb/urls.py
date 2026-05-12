@@ -40,6 +40,7 @@ urlpatterns = [
     path('get_relations', views.get_relations),
     path('rename_category', views.rename_category),
     path('update_node_position', views.update_node_position),
+    path('remove_from_category', views.remove_from_category),
     path('get_graph_nodes', views.get_graph_nodes),
     path('move_data', views.move_data),
     path('', TemplateView.as_view(template_name='index.html')),
