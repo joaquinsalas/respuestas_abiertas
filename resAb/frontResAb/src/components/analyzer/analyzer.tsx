@@ -33,11 +33,13 @@ function DisplayData({
     setTarget,
     setComponent,
     readOnly = false,
+    onItemContextMenu,
 }: {
     data: Data[];
     setTarget: any;
     setComponent: any;
     readOnly?: boolean;
+    onItemContextMenu?: (item: Data, x: number, y: number) => void;
 }) {
     const handleSelect = (id: string, text: string) => {
         if (readOnly) return;
@@ -52,6 +54,10 @@ function DisplayData({
                     key={el.id}
                     className={`sample-item${readOnly ? ' sample-item--readonly' : ''}${el.inCategory === 1 ? ' sample-item--in-category' : ''}`}
                     onClick={() => handleSelect(el.id, el.data)}
+                    onContextMenu={onItemContextMenu ? e => {
+                        e.preventDefault();
+                        onItemContextMenu(el, e.clientX, e.clientY);
+                    } : undefined}
                 >
                     {el.data}
                 </div>
@@ -108,6 +114,132 @@ function Pagination({
     );
 }
 
+/* ─── Item Context Menu ──────────────────────────────────────────────────────── */
+
+function ItemContextMenu({ x, y, onMove, onExclude, onClose }: {
+    x: number; y: number;
+    onMove: () => void;
+    onExclude: () => void;
+    onClose: () => void;
+}) {
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            const el = document.getElementById('item-context-menu');
+            if (el && !el.contains(e.target as unknown as HTMLElement)) onClose();
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [onClose]);
+
+    return (
+        <div id="item-context-menu" className="item-context-menu" style={{ top: y, left: x }}>
+            <button onClick={() => { onMove(); onClose(); }}>Mover a otra categoría</button>
+            <button className="btn-danger" onClick={() => { onExclude(); onClose(); }}>Excluir de categoría</button>
+        </div>
+    );
+}
+
+/* ─── Move To Category Modal ─────────────────────────────────────────────────── */
+
+function MoveToCategoryModal({ graphId, item, currentNodeId, onClose, onMoved }: {
+    graphId: any;
+    item: Data;
+    currentNodeId: string;
+    onClose: () => void;
+    onMoved: () => void;
+}) {
+    const { authFetch } = useAuth();
+    const [nodes, setNodes] = useState<{ id: number; name: string }[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        const fetch = async () => {
+            try {
+                const res = await authFetch(
+                    `${ROUTES.get_graph_nodes}?graph_id=${graphId}&exclude_node_id=${currentNodeId}`
+                );
+                if (res.ok) {
+                    const json = await res.json();
+                    setNodes(json.nodes);
+                } else {
+                    setError('No se pudieron cargar las categorías.');
+                }
+            } catch {
+                setError('Error de red.');
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetch();
+    }, [graphId, currentNodeId]);
+
+    const handleSelect = async (toNodeId: number) => {
+        setSaving(true);
+        setError('');
+        try {
+            const res = await authFetch(ROUTES.move_data, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    graph_id: graphId,
+                    data_id: item.id,
+                    from_node_id: parseInt(currentNodeId),
+                    to_node_id: toNodeId,
+                }),
+            });
+            if (res.ok) {
+                onMoved();
+            } else {
+                const msg = await res.text().catch(() => '');
+                setError(msg.slice(0, 200) || 'No se pudo mover el dato.');
+            }
+        } catch {
+            setError('Error de red. Verifica tu conexión.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-box" onClick={e => e.stopPropagation()}>
+                <h2 className="modal-title">Mover a otra categoría</h2>
+                <p className="move-category-item-preview">{item.data}</p>
+                {error && (
+                    <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.85rem', margin: 'var(--space-2) 0' }}>
+                        {error}
+                    </p>
+                )}
+                {loading ? (
+                    <div className="loader-container"><div className="loader" /></div>
+                ) : nodes.length === 0 ? (
+                    <p style={{ fontSize: '0.85rem', color: 'var(--color-muted)' }}>
+                        No hay otras categorías disponibles.
+                    </p>
+                ) : (
+                    <div className="move-category-list">
+                        {nodes.map(n => (
+                            <button
+                                key={n.id}
+                                className="move-category-item"
+                                onClick={() => handleSelect(n.id)}
+                                disabled={saving}
+                            >
+                                {n.name}
+                            </button>
+                        ))}
+                    </div>
+                )}
+                <div className="modal-actions">
+                    <button className="btn-ghost" onClick={onClose}>Cancelar</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 /* ─── DisplaySample ──────────────────────────────────────────────────────────── */
 
 interface DisplaySampleProps {
@@ -116,6 +248,7 @@ interface DisplaySampleProps {
     initialTypeSample?: number;
     graph_id: any;
     categoryProp?: string;
+    nodeId?: string;
     floating?: boolean;
     onClose?: () => void;
     refreshTrigger?: boolean;
@@ -127,6 +260,7 @@ function DisplaySample({
     initialTypeSample = 0,
     graph_id,
     categoryProp = '',
+    nodeId,
     floating = false,
     onClose,
     refreshTrigger,
@@ -141,6 +275,30 @@ function DisplaySample({
     const [totalItems, setTotalItems] = useState(0);
     const [query, setQuery] = useState(false);
     const [sampleError, setSampleError] = useState('');
+    const [localRefresh, setLocalRefresh] = useState(false);
+    const [itemMenu, setItemMenu] = useState<{ item: Data; x: number; y: number } | null>(null);
+    const [moveModal, setMoveModal] = useState<Data | null>(null);
+    const [excludeError, setExcludeError] = useState('');
+
+    const handleExclude = async (item: Data) => {
+        if (!nodeId) return;
+        setExcludeError('');
+        try {
+            const res = await authFetch(ROUTES.remove_from_category, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ graph_id, data_id: item.id, node_id: parseInt(nodeId) }),
+            });
+            if (res.ok) {
+                setLocalRefresh(r => !r);
+            } else {
+                const msg = await res.text().catch(() => '');
+                setExcludeError(msg.slice(0, 200) || 'No se pudo excluir el dato.');
+            }
+        } catch {
+            setExcludeError('Error de red. Verifica tu conexión.');
+        }
+    };
 
     useEffect(() => {
         const fetchData = async () => {
@@ -159,7 +317,7 @@ function DisplaySample({
             }
         };
         fetchData();
-    }, [random, typeSample, itemsPerPage, category, page, graph_id, query, refreshTrigger]);
+    }, [random, typeSample, itemsPerPage, category, page, graph_id, query, refreshTrigger, localRefresh]);
 
     const readOnly = typeSample === 1 || typeSample === 2;
 
@@ -173,6 +331,11 @@ function DisplaySample({
             {sampleError && (
                 <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.85rem', padding: 'var(--space-2)' }}>
                     {sampleError}
+                </p>
+            )}
+            {excludeError && (
+                <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.85rem', padding: 'var(--space-2)' }}>
+                    {excludeError}
                 </p>
             )}
             <div className="sample-controls">
@@ -200,7 +363,13 @@ function DisplaySample({
                     </button>
                 )}
             </div>
-            <DisplayData data={sampleData} setTarget={setTarget} setComponent={setComponent} readOnly={readOnly} />
+            <DisplayData
+                data={sampleData}
+                setTarget={setTarget}
+                setComponent={setComponent}
+                readOnly={readOnly}
+                onItemContextMenu={floating ? (item, x, y) => setItemMenu({ item, x, y }) : undefined}
+            />
             <div className="sample-footer">
                 <span className="sample-count">{totalItems} respuestas</span>
                 {random === 0 && (
@@ -210,7 +379,7 @@ function DisplaySample({
                 (<button className="btn-ghost" style={{ fontSize: 'var(--font-size-xs)' }} onClick={() => setComponent(1)}>
                                 ← Volver
                             </button>)}
-                        
+
             </div>
         </>
     );
@@ -227,6 +396,27 @@ function DisplaySample({
                     </div>
                     {inner}
                 </div>
+                {itemMenu && (
+                    <ItemContextMenu
+                        x={itemMenu.x}
+                        y={itemMenu.y}
+                        onMove={() => setMoveModal(itemMenu.item)}
+                        onExclude={() => handleExclude(itemMenu.item)}
+                        onClose={() => setItemMenu(null)}
+                    />
+                )}
+                {moveModal && nodeId && (
+                    <MoveToCategoryModal
+                        graphId={graph_id}
+                        item={moveModal}
+                        currentNodeId={nodeId}
+                        onClose={() => setMoveModal(null)}
+                        onMoved={() => {
+                            setMoveModal(null);
+                            setLocalRefresh(r => !r);
+                        }}
+                    />
+                )}
             </div>
         );
     }
@@ -553,7 +743,7 @@ function RenameModal({ currentName, graph_id, node_id, onClose, onRenamed }: {
 const MenuRightClick = ({
     id, top, left, right, bottom,
     graph_id, onPaneClick, setExec,
-    setData, category, setShowData, onNodeDeleted,
+    setData, category, setShowData, setNodeId, onNodeDeleted,
     ...props
 }: any) => {
     const { authFetch } = useAuth();
@@ -589,6 +779,7 @@ const MenuRightClick = ({
     const handleView = () => {
         onPaneClick();
         setData(category);
+        setNodeId(String(id));
         setShowData(true);
     };
 
@@ -861,6 +1052,7 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted, onCaptureReady }:
     const [edgeDeleted, setEdgeDeleted] = useState(false);
     const [showData, setShowData] = useState(false);
     const [category, setCategory] = useState('');
+    const [activeNodeId, setActiveNodeId] = useState('');
     const [progress, setProgress] = useState<number | null>(null);
     const [graphError, setGraphError] = useState('');
     const [connectError, setConnectError] = useState('');
@@ -1075,6 +1267,7 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted, onCaptureReady }:
                             exec={nodeDeleted}
                             setData={setCategory}
                             setShowData={setShowData}
+                            setNodeId={setActiveNodeId}
                             onNodeDeleted={onNodeDeleted}
                         />
                     )}
@@ -1089,6 +1282,7 @@ function SectionGraph({ exec = false, graph_id, onNodeDeleted, onCaptureReady }:
                         initialTypeSample={1}
                         graph_id={graph_id}
                         categoryProp={category}
+                        nodeId={activeNodeId}
                     />
                 )}
             </div>

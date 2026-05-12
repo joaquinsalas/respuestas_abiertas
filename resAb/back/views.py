@@ -1189,6 +1189,184 @@ def delete_graph(request):
     return HttpResponse(status=204)
 
 
+@api_view(['POST'])
+def remove_from_category(request):
+    """Excluir un dato de una categoría: elimina el vínculo en BD, actualiza S3 y desbloquea si corresponde."""
+    try:
+        graph_id = request.data.get('graph_id')
+        data_id  = request.data.get('data_id')
+        node_id  = request.data.get('node_id')
+    except Exception as e:
+        logger.error("remove_from_category: parámetros inválidos user_id=%s — %s", request.user.pk, e)
+        return Response(f"Error en los datos: {e}", status=400)
+
+    if not all([graph_id, data_id, node_id]):
+        return Response("Faltan parámetros obligatorios", status=400)
+
+    user = request.user
+    try:
+        graph = Graphs.objects.get(id=graph_id, id_user=user)
+    except Graphs.DoesNotExist:
+        logger.error("remove_from_category: grafo no encontrado user_id=%s graph_id=%s", user.pk, graph_id)
+        return Response("Grafo no encontrado", status=400)
+
+    try:
+        node = Nodes.objects.get(id=node_id, graph=graph)
+    except Nodes.DoesNotExist:
+        logger.error("remove_from_category: nodo no encontrado user_id=%s graph_id=%s node_id=%s", user.pk, graph_id, node_id)
+        return Response("Categoría no encontrada en este grafo", status=400)
+
+    try:
+        data_obj = Data.objects.get(graph=graph, id_data=data_id)
+    except Data.DoesNotExist:
+        logger.error("remove_from_category: dato no encontrado user_id=%s graph_id=%s data_id=%s", user.pk, graph_id, data_id)
+        return Response("Dato no encontrado", status=400)
+
+    deleted, _ = Nodes_Category.objects.filter(node=node, data=data_obj).delete()
+    if deleted == 0:
+        return Response("El dato no pertenece a esta categoría", status=400)
+
+    # Quitar fila del parquet de la categoría
+    BASE_PATH = f"{user.pk}/{graph_id}"
+    id_col    = graph.id_column
+    try:
+        df = read_parquet_s3_pl(f"{BASE_PATH}/{node.node_name}.parquet")
+        df = df.filter(pl.col(id_col).cast(pl.Utf8) != str(data_id))
+        save_or_update_tree_s3(f"{BASE_PATH}/{node.node_name}.parquet", df)
+    except FileNotFoundError:
+        logger.warning(
+            "remove_from_category: parquet no existe user_id=%s graph_id=%s node=%s",
+            user.pk, graph_id, node.node_name,
+        )
+    except Exception:
+        logger.error(
+            "remove_from_category: error actualizando parquet user_id=%s graph_id=%s",
+            user.pk, graph_id, exc_info=True,
+        )
+
+    # Desbloquear solo si el dato ya no pertenece a ninguna categoría
+    remaining = Nodes_Category.objects.filter(data=data_obj).count()
+    if remaining == 0:
+        Data.objects.filter(pk=data_obj.pk).update(block=False)
+
+    return HttpResponse(status=204)
+
+
+@api_view(['GET'])
+def get_graph_nodes(request):
+    """Devuelve los nodos (categorías) de un grafo, opcionalmente excluyendo uno por ID."""
+    graph_id = request.GET.get('graph_id')
+    exclude_node_id = request.GET.get('exclude_node_id')
+    if not graph_id:
+        return Response("graph_id es requerido", status=400)
+
+    user = request.user
+    try:
+        graph = Graphs.objects.get(id=graph_id, id_user=user)
+    except Graphs.DoesNotExist:
+        logger.error(
+            "get_graph_nodes: grafo no encontrado user_id=%s graph_id=%s",
+            user.pk, graph_id,
+        )
+        return Response("Grafo no encontrado", status=400)
+
+    qs = Nodes.objects.filter(graph=graph)
+    if exclude_node_id:
+        qs = qs.exclude(id=exclude_node_id)
+
+    return Response({"nodes": [{"id": n.id, "name": n.node_name} for n in qs]})
+
+
+@api_view(['POST'])
+def move_data(request):
+    """Mover un dato de una categoría a otra: actualiza BD y parquets en S3."""
+    try:
+        graph_id    = request.data.get('graph_id')
+        data_id     = request.data.get('data_id')
+        from_node_id = request.data.get('from_node_id')
+        to_node_id   = request.data.get('to_node_id')
+    except Exception as e:
+        logger.error("move_data: parámetros inválidos user_id=%s — %s", request.user.pk, e)
+        return Response(f"Error en los datos: {e}", status=400)
+
+    if not all([graph_id, data_id, from_node_id, to_node_id]):
+        return Response("Faltan parámetros obligatorios", status=400)
+    if str(from_node_id) == str(to_node_id):
+        return Response("from_node_id y to_node_id no pueden ser iguales", status=400)
+
+    user = request.user
+    try:
+        graph = Graphs.objects.get(id=graph_id, id_user=user)
+    except Graphs.DoesNotExist:
+        logger.error("move_data: grafo no encontrado user_id=%s graph_id=%s", user.pk, graph_id)
+        return Response("Grafo no encontrado", status=400)
+
+    try:
+        from_node = Nodes.objects.get(id=from_node_id, graph=graph)
+        to_node   = Nodes.objects.get(id=to_node_id,   graph=graph)
+    except Nodes.DoesNotExist:
+        logger.error(
+            "move_data: nodo no encontrado user_id=%s graph_id=%s from=%s to=%s",
+            user.pk, graph_id, from_node_id, to_node_id,
+        )
+        return Response("Uno o ambos nodos no encontrados en este grafo", status=400)
+
+    try:
+        data_obj = Data.objects.get(graph=graph, id_data=data_id)
+    except Data.DoesNotExist:
+        logger.error(
+            "move_data: dato no encontrado user_id=%s graph_id=%s data_id=%s",
+            user.pk, graph_id, data_id,
+        )
+        return Response("Dato no encontrado", status=400)
+
+    deleted, _ = Nodes_Category.objects.filter(node=from_node, data=data_obj).delete()
+    if deleted == 0:
+        return Response("El dato no pertenece a la categoría de origen", status=400)
+
+    Nodes_Category.objects.get_or_create(node=to_node, data=data_obj)
+
+    BASE_PATH = f"{user.pk}/{graph_id}"
+    id_col    = graph.id_column
+
+    # Quitar fila del parquet origen
+    try:
+        df_from = read_parquet_s3_pl(f"{BASE_PATH}/{from_node.node_name}.parquet")
+        df_from = df_from.filter(pl.col(id_col).cast(pl.Utf8) != str(data_id))
+        save_or_update_tree_s3(f"{BASE_PATH}/{from_node.node_name}.parquet", df_from)
+    except FileNotFoundError:
+        logger.warning(
+            "move_data: parquet origen no existe user_id=%s graph_id=%s node=%s",
+            user.pk, graph_id, from_node.node_name,
+        )
+    except Exception:
+        logger.error(
+            "move_data: error actualizando parquet origen user_id=%s graph_id=%s",
+            user.pk, graph_id, exc_info=True,
+        )
+
+    # Agregar fila al parquet destino
+    try:
+        raw_df = read_parquet_s3_pl(f"{BASE_PATH}/raw.parquet")
+        row_df = raw_df.filter(pl.col(id_col).cast(pl.Utf8) == str(data_id))
+
+        dest_path = f"{BASE_PATH}/{to_node.node_name}.parquet"
+        try:
+            df_to = read_parquet_s3_pl(dest_path)
+            df_to = pl.concat([df_to, row_df], how="diagonal")
+        except FileNotFoundError:
+            df_to = row_df
+
+        save_or_update_tree_s3(dest_path, df_to)
+    except Exception:
+        logger.error(
+            "move_data: error actualizando parquet destino user_id=%s graph_id=%s",
+            user.pk, graph_id, exc_info=True,
+        )
+
+    return HttpResponse(status=204)
+
+
 @api_view(['POST', 'DELETE'])
 def delete_edge(request):
     """Eliminar una arista."""
